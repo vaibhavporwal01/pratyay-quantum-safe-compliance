@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.rules.models import Paragraph, SourceDoc
-from app.rules.obligation_features import LABELS
+from app.rules.obligation_features import FEATURES_VERSION, LABELS, Record, make_records
 
 REVIEW_THRESHOLD = Decimal("0.800")
 DEFAULT_MODEL_PATH = (
@@ -65,6 +65,11 @@ def load_model(path: Path | None = None) -> LoadedModel:
     if not path.is_file():
         raise ModelNotFound(f"No obligation model at {path}. Run ml/obligation/train.py.")
     bundle = joblib.load(path)
+    if bundle.get("features_version") != FEATURES_VERSION:
+        raise ModelNotFound(
+            f"Model at {path} was built for features version {bundle.get('features_version')}, "
+            f"this code needs {FEATURES_VERSION}. Run ml/obligation/train.py."
+        )
     labels = tuple(bundle["labels"])
     if set(labels) != set(LABELS):
         raise ModelNotFound(f"Model labels {labels} do not match {LABELS}")
@@ -75,10 +80,11 @@ def needs_review(confidence: Decimal | None) -> bool:
     return confidence is None or confidence < REVIEW_THRESHOLD
 
 
-def predict(texts: list[str], model: LoadedModel) -> list[tuple[str, Decimal]]:
-    if not texts:
+def predict(records: list[Record], model: LoadedModel) -> list[tuple[str, Decimal]]:
+    """records come from make_records() over a whole document."""
+    if not records:
         return []
-    probs = model.pipeline.predict_proba(texts)
+    probs = model.pipeline.predict_proba(records)
     classes = list(model.pipeline.classes_)
     out = []
     for row in probs:
@@ -94,10 +100,9 @@ async def classify_paragraphs(
     """Fill label and confidence for every paragraph of the document, then commit."""
     model = model or load_model()
     paragraphs = list(await session.scalars(select(Paragraph).where(Paragraph.doc_id == doc_id)))
+    records = make_records([(p.number, p.text) for p in paragraphs])
     result = ClassifyResult(doc_id=doc_id, model_version=model.version)
-    for p, (label, conf) in zip(
-        paragraphs, predict([p.text for p in paragraphs], model), strict=True
-    ):
+    for p, (label, conf) in zip(paragraphs, predict(records, model), strict=True):
         p.label = label
         p.confidence = conf
         result.total += 1
