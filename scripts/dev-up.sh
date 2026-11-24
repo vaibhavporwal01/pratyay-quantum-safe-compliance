@@ -23,14 +23,14 @@ echo "Applying migrations..."
 if lsof -ti:8000 >/dev/null 2>&1; then
   echo "API already running on :8000"
 else
-  (cd apps/api && nohup uv run fastapi dev app/main.py > ../../.dev/api.log 2>&1 & echo $! > ../../.dev/api.pid)
+  (cd apps/api && { nohup uv run fastapi dev app/main.py > ../../.dev/api.log 2>&1 & echo $! > ../../.dev/api.pid; })
   echo "API starting on http://localhost:8000 (logs: .dev/api.log)"
 fi
 
 if lsof -ti:3000 >/dev/null 2>&1; then
   echo "Web already running on :3000"
 else
-  (cd apps/web && nohup pnpm dev > ../../.dev/web.log 2>&1 & echo $! > ../../.dev/web.pid)
+  (cd apps/web && { nohup pnpm dev > ../../.dev/web.log 2>&1 & echo $! > ../../.dev/web.pid; })
   echo "Web starting on http://localhost:3000 (logs: .dev/web.log)"
 fi
 
