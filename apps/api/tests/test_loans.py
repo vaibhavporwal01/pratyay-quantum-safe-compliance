@@ -209,6 +209,7 @@ async def test_unknown_product_and_tenor(api) -> None:
 
 async def test_seed_loans_covers_every_path(session, monkeypatch) -> None:
     from app.identity import service as identity
+    from app.loans import seed as seed_mod
     from app.loans.models import Application
     from app.loans.seed import seed_loans
 
@@ -229,12 +230,64 @@ async def test_seed_loans_covers_every_path(session, monkeypatch) -> None:
     }
     rekha = rows["APP-2026-0142"]
     assert rekha.borrower_name == "Rekha K." and rekha.borrower_id is not None
+    # Fixed dates: Rekha's whole journey on Monday 12 Oct 2026, the others in Oct and Nov.
+    assert {a.created_at.astimezone(seed_mod.IST).date().isoformat() for a in rows.values()} == {
+        "2026-10-12", "2026-10-20", "2026-10-28", "2026-11-09", "2026-11-16", "2026-11-23"}
+    d = await service.detail(session, rekha)
+    assert [e["action"] for e in d["events"]] == [
+        "submitted", "evaluated", "evaluated", "recommended", "evaluated", "decided"]
+    assert d["evaluation"]["on_date"].isoformat() == "2026-10-12"
+    assert d["final_evaluation"]["kfs"]["valid_until"] == "2026-10-15"  # 3 working days
+    assert d["decision"]["decided_at"].astimezone(seed_mod.IST).strftime("%H:%M") == "11:42"
     ev = await service.latest_evaluation(session, rows["APP-2026-0148"])
     assert ev.outcome == "refer"
     ev = await service.latest_evaluation(session, rows["APP-2026-0150"])
     assert ev.outcome == "fail" and ev.offer["amount_paise"] > 0
     created, present = await seed_loans(session)
     assert created == [] and len(present) == 6
+
+    # One seeded earlier at another time is re-dated, not duplicated.
+    rekha.created_at = seed_mod.ist(11, 1, 9, 0)
+    await session.flush()
+    created, present = await seed_loans(session)
+    assert created == ["APP-2026-0142 (re-dated)"] and len(present) == 5
+    assert len((await session.scalars(select(Application))).all()) == 6
+
+
+async def test_events_follow_insert_order_when_times_tie(api, session) -> None:
+    from datetime import UTC, datetime
+
+    tie = datetime(2026, 10, 12, 5, 0, tzinfo=UTC)
+    api.as_(OFFICER)
+    app = await service.create_application(session, OFFICER, {
+        **REKHA, "borrower_name": "Asha M.", "amount_paise": 30_000_00, "tenor_months": 12,
+        "existing_monthly_repayments_paise": 2_000_00}, at=tie)
+    await service.recommend(session, OFFICER, app.id, "approve", None, None, at=tie)
+    await service.decide(session, CHECKER, app.id, "approve", None, None, at=tie)
+    d = await service.detail(session, app)
+    assert [e["action"] for e in d["events"]] == [
+        "submitted", "evaluated", "evaluated", "recommended", "evaluated", "decided"]
+    assert {e["created_at"] for e in d["events"]} == {tie}
+
+
+async def test_ledger_lists_decided_applications_only(api) -> None:
+    d = await submit(api)  # Rekha: fails MF-02 at the amount asked for
+    app_id = d["application"]["id"]
+    await submit(api, OFFICER, borrower_name="Lakshmi R.", household_income_annual_paise=None)
+    api.as_(OFFICER)
+    await api.post(f"/api/v1/loans/applications/{app_id}/recommend", json={
+        "recommendation": "approve_modified", "amount_paise": 66_000_00})
+    api.as_(AUDITOR)
+    assert (await api.get("/api/v1/loans/decisions")).json() == []  # recommended, not decided
+    assert (await api.get("/api/v1/loans/counts")).json()["decisions"] == 0
+    api.as_(CHECKER)
+    await api.post(f"/api/v1/loans/applications/{app_id}/decide", json={"outcome": "approve"})
+    api.as_(AUDITOR)
+    rows = (await api.get("/api/v1/loans/decisions")).json()
+    assert len(rows) == (await api.get("/api/v1/loans/counts")).json()["decisions"] == 1
+    assert rows[0]["rules"]["in_force"] == 8 and rows[0]["rules"]["checked"] == 5
+    assert rows[0]["rules"]["deciding"] == ["MF-02 v1"]
+    assert "MF-05 v1" in rows[0]["rules"]["versions"]
 
 
 async def test_preview_saves_nothing_and_replay_matches(api, session) -> None:
