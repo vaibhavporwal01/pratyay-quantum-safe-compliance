@@ -1,26 +1,205 @@
 @import "tailwindcss";
 
+/*
+ * Pratyay Ledger, mode "v2.0 Warm paper". Values copied from the Figma
+ * variable collection. Paper and ink, one blue for the stamp, three verdict
+ * colours. Nothing else.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #f4f1ea;
+  --paper-2: #fbf9f3;
+  --white: #ffffff;
+  --ink: #1a1814;
+  --ink-2: #5f584b;
+  --muted: #736c5c;
+  --rule: #cfc8b8;
+  --rule-2: #e3ddcf;
+  --stamp: #1f3a5f;
+  --stamp-bg: #e6ebf2;
+  --pass: #2e6b3f;
+  --pass-bg: #e4ebdf;
+  --fail: #a33a2a;
+  --fail-bg: #f3e1dc;
+  --refer: #8a5a00;
+  --refer-bg: #f2e6cc;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-white: var(--white);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-rule-2: var(--rule-2);
+  --color-stamp: var(--stamp);
+  --color-stamp-bg: var(--stamp-bg);
+  --color-pass: var(--pass);
+  --color-pass-bg: var(--pass-bg);
+  --color-fail: var(--fail);
+  --color-fail-bg: var(--fail-bg);
+  --color-refer: var(--refer);
+  --color-refer-bg: var(--refer-bg);
+
+  --font-serif: var(--font-newsreader), Georgia, serif;
+  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  /* Receipt drop shadow from Figma: ink at low alpha, not a new colour. */
+  --shadow-receipt: 0 10px 12px rgb(26 24 20 / 0.08), 0 1px 1px rgb(26 24 20 / 0.1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Text styles. Figma letter spacing is a percentage of size, so em here. */
+@utility type-display {
+  font-family: var(--font-serif);
+  font-size: 64px;
+  line-height: 68px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+@utility type-title-xl {
+  font-family: var(--font-serif);
+  font-size: 40px;
+  line-height: 46px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+@utility type-title-l {
+  font-family: var(--font-serif);
+  font-size: 30px;
+  line-height: 36px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+@utility type-title-m {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+@utility type-title-s {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+@utility type-numeral-l {
+  font-family: var(--font-serif);
+  font-size: 36px;
+  line-height: 40px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+@utility type-numeral-m {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+}
+@utility type-body-l {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 26px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+@utility type-body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+@utility type-body-medium {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+@utility type-button {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+@utility type-small {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+@utility type-small-medium {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+@utility type-caption {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+@utility type-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+@utility type-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+@utility type-mono-medium {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* Dotted leader used by ledger rows and receipt lines. */
+@utility leader {
+  flex: 1 0 0;
+  min-width: 1px;
+  height: 1px;
+  border-top: 1px dashed var(--rule);
+}
+
+@layer base {
+  html {
+    background: var(--paper);
+    color: var(--ink);
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--stamp);
+    outline-offset: 2px;
+  }
 }
