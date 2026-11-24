@@ -306,6 +306,35 @@ async def set_stage(session: AsyncSession, user: User, rule_id: uuid.UUID, stage
     return rule
 
 
+async def set_effective_to(
+    session: AsyncSession, user: User, rule_id: uuid.UUID, effective_to: date, note: str
+) -> Rule:
+    """End an approved rule on a date set by a later source (for example an amendment that
+    deletes its paragraph). The rule stays approved and applies before that date. The note must
+    cite the source. A checker's step, audited."""
+    rule = await get_rule(session, rule_id)
+    if rule.status != "approved":
+        raise WorkflowError(f"Cannot set an end date on a rule that is {rule.status}.")
+    if rule.made_by == user.id:
+        raise MakerIsChecker("The maker of a rule cannot also set its end date.")
+    if not (note and note.strip()):
+        raise WorkflowError("A note citing the source is needed to set an end date.")
+    if rule.effective_from and effective_to < rule.effective_from:
+        raise InvalidRule(["effective_to: before effective_from"])
+    previous = rule.effective_to
+    rule.effective_to = effective_to
+    rule.review_note = note.strip()
+    rule.checked_by = user.id
+    rule.checked_at = datetime.now(UTC)
+    await session.flush()
+    await audit.log_event(
+        session, user.id, "rule.effective_to_set", f"rule:{rule.id}",
+        {"code": rule.code, "from": previous.isoformat() if previous else None,
+         "to": effective_to.isoformat(), "note": rule.review_note},
+    )
+    return rule
+
+
 async def rule_version(session: AsyncSession, rule: Rule) -> int:
     """1 for a rule that supersedes nothing, 2 for its first replacement, and so on."""
     version, prev = 1, rule.supersedes_rule_id

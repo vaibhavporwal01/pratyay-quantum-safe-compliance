@@ -59,6 +59,9 @@ class RuleSpec:
     section: str | None = None
     # When in the loan's life the rule is checked: origination, servicing or recovery.
     stage: str = "origination"
+    # Set when a later source ends the rule, with a note citing that source.
+    effective_to: date | None = None
+    effective_to_note: str | None = None
 
 
 CF_TITLE = (
@@ -75,6 +78,12 @@ DOCS = {"CF": (CF_FILE, CF_TITLE), "RBC": (RBC_FILE, RBC_TITLE)}
 
 KFS_SCOPE = "all new retail and MSME term loans sanctioned on or after October 1, 2024"
 KFS_SCOPE_NOTE = "Scope of paragraph 29: credit card receivables are exempted."
+
+MF05_END_NOTE = (
+    "Ends 31 Dec 2026: the Reserve Bank of India (Non-Banking Financial Companies - Responsible "
+    "Business Conduct) (Third Amendment) Directions, 2026 (RBI/2026-27/230, 6 Aug 2026) delete "
+    "paragraph 91 with effect from 1 Jan 2027. That amendment is not in data/sources."
+)
 
 RULES: list[RuleSpec] = [
     RuleSpec(
@@ -157,6 +166,8 @@ RULES: list[RuleSpec] = [
                                         "recovery."}],
         section="H. Conduct towards Microfinance borrowers",
         stage="recovery",
+        effective_to=date(2026, 12, 31),
+        effective_to_note=MF05_END_NOTE,
     ),
 ]
 
@@ -233,6 +244,16 @@ class SeedReport:
     problems: list[str] = field(default_factory=list)
 
 
+async def _apply_end_date(
+    session: AsyncSession, checker: User, rule: Any, spec: RuleSpec, report: "SeedReport"
+) -> None:
+    if spec.effective_to and rule.status == "approved" and rule.effective_to != spec.effective_to:
+        await service.set_effective_to(
+            session, checker, rule.id, spec.effective_to, spec.effective_to_note or ""
+        )
+        report.corrected.append(f"{spec.code}: effective_to set to {spec.effective_to}")
+
+
 async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
     report = SeedReport(users_added=await identity.seed_dev_users(session))
     maker_row = await identity.first_user_with_role(session, "maker")
@@ -279,6 +300,7 @@ async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
             if live.stage != spec.stage:
                 await service.set_stage(session, checker, live.id, spec.stage)
                 report.corrected.append(f"{spec.code}: stage set to {spec.stage}")
+            await _apply_end_date(session, checker, live, spec, report)
             report.skipped.append(spec.code)
             continue
         if live:
@@ -308,6 +330,7 @@ async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
             report.created.append(f"{spec.code} (draft: values missing)")
             continue
         await service.approve(session, checker, rule.id, "Seeded from the source PDF.")
+        await _apply_end_date(session, checker, rule, spec, report)
         report.created.append(spec.code)
     return report
 
