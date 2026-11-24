@@ -15,6 +15,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Identity,
     Integer,
     Text,
     func,
@@ -89,6 +90,8 @@ class Evaluation(Base):
     )
 
     id: Mapped[uuid.UUID] = _pk()
+    # Insert order. Timestamps can tie (seeded steps share a time); this never does.
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
     application_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey(f"{SCHEMA}.applications.id", ondelete="CASCADE"), index=True
     )
@@ -146,6 +149,8 @@ class Event(Base):
     __table_args__ = ({"schema": SCHEMA},)
 
     id: Mapped[uuid.UUID] = _pk()
+    # Insert order: the step history is read in this order, never by timestamp.
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
     application_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey(f"{SCHEMA}.applications.id", ondelete="CASCADE"), index=True
     )
