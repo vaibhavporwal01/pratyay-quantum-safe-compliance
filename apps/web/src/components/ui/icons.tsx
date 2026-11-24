@@ -13,6 +13,8 @@ import {
   IconGavel,
   IconHistory,
   IconInfoCircle,
+  IconMenu2,
+  IconPhone,
   IconPlus,
   IconScale,
   IconSearch,
@@ -46,6 +48,8 @@ export type IconName =
   | "gavel"
   | "history"
   | "info-circle"
+  | "menu-2"
+  | "phone"
   | "plus"
   | "scale"
   | "search"
@@ -69,6 +73,8 @@ const ICONS: Record<IconName, TablerIcon> = {
   gavel: IconGavel,
   history: IconHistory,
   "info-circle": IconInfoCircle,
+  "menu-2": IconMenu2,
+  phone: IconPhone,
   plus: IconPlus,
   scale: IconScale,
   search: IconSearch,
