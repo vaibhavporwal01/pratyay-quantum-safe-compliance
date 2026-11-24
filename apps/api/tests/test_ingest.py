@@ -156,7 +156,11 @@ async def test_api_upload_and_list_paragraphs(client: AsyncClient) -> None:
     paras = r.json()
     assert len(paras) == body["report"]["paragraphs"]
     assert paras[0]["number"] == "1"
-    assert all(p["label"] is None and p["confidence"] is None for p in paras)
+    # The upload runs the classifier when its model is present; otherwise labels stay empty.
+    if body["classified"]:
+        assert all(p["label"] and p["confidence"] is not None for p in paras)
+    else:
+        assert all(p["label"] is None and p["confidence"] is None for p in paras)
 
 
 async def test_api_rejects_non_pdf(client: AsyncClient) -> None:

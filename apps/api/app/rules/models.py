@@ -3,7 +3,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlalchemy import (
     BigInteger,
@@ -103,6 +103,9 @@ APPLIES_TO = ("microfinance", "all")
 
 class Rule(Base):
     __tablename__ = "rules"
+    # Fetch server-set columns (updated_at on UPDATE) with RETURNING, so async code never
+    # lazy-loads them.
+    __mapper_args__: ClassVar[dict[str, Any]] = {"eager_defaults": True}
     __table_args__ = (
         UniqueConstraint("rule_set_id", "code"),
         CheckConstraint(f"status IN {RULE_STATUSES}", name="status"),

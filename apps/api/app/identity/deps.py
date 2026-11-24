@@ -48,8 +48,10 @@ def dev_role() -> str | None:
     """The role the development stand-in signs in as, or None outside development."""
     if settings.app_env != "development":
         return None
-    role = _dev_role.get() or settings.dev_user_role
-    return role if role in ROLES else None
+    for role in (_dev_role.get(), settings.dev_user_role):
+        if role in ROLES:
+            return role
+    return None
 
 
 async def get_current_user() -> User:

@@ -15,7 +15,7 @@ def test_unknown_template_and_bad_params_are_rejected() -> None:
         t.validate_params("max_ratio", {"numerator": "a", "denominator": "b", "max_percent": 150})
     with pytest.raises(t.TemplateError, match="start"):
         t.validate_params("time_window", {"activity": "call", "start": "9am", "end": "18:00"})
-    with pytest.raises(t.TemplateError, match="extra"):
+    with pytest.raises(t.TemplateError, match="amount: Extra inputs"):
         t.validate_params("prohibited_charge", {"charge": "x", "amount": 5})
 
 
