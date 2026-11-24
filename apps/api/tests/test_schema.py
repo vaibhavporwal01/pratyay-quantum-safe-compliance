@@ -21,11 +21,12 @@ EXPECTED_TABLES = {
     ("origination", "applications"),
     ("decision", "decisions"),
     ("decision", "rule_results"),
+    ("identity", "users"),
 }
 
 TABLES_SQL = text(
     "SELECT table_schema, table_name FROM information_schema.tables "
-    "WHERE table_schema IN ('rules', 'origination', 'decision')"
+    "WHERE table_schema IN ('rules', 'origination', 'decision', 'identity')"
 )
 
 
@@ -64,9 +65,10 @@ async def make_rule(
 ) -> uuid.UUID:
     return await _scalar(
         conn,
-        "INSERT INTO rules.rules (rule_set_id, code, title, body, effective_from, "
-        "source_doc_id, source_para, origin) VALUES (:rs, :code, 'Title', '{}'::jsonb, "
-        ":eff, :doc, '4.1', 'manual') RETURNING id",
+        "INSERT INTO rules.rules (rule_set_id, code, title, template, params, effective_from, "
+        "source_doc_id, source_para, para_text, origin, made_by) VALUES (:rs, :code, 'Title', "
+        "'required_disclosure', '{}'::jsonb, :eff, :doc, '4.1', 'Text', 'manual', "
+        "gen_random_uuid()) RETURNING id",
         rs=rule_set_id,
         code=code,
         eff=date(2026, 1, 1),
@@ -207,3 +209,22 @@ async def test_source_doc_hash_is_unique(conn: AsyncConnection) -> None:
     await assert_rejected(conn, conn.execute(sql, {"h": b"\x01" * 32}), "ix_source_docs_sha3_256")
     # Documents without a hash yet do not collide with each other.
     await conn.execute(text("INSERT INTO rules.source_docs (title) VALUES ('A'), ('B')"))
+
+
+async def test_rule_maker_is_never_checker(conn: AsyncConnection) -> None:
+    doc = await make_source_doc(conn)
+    rule = await make_rule(conn, await make_rule_set(conn, uuid.uuid4(), 1), doc, "MF-01")
+    coro = conn.execute(
+        text("UPDATE rules.rules SET checked_by = made_by WHERE id = :id"), {"id": rule}
+    )
+    await assert_rejected(conn, coro, "ck_rules_maker_checker")
+
+
+async def test_rule_status_and_template_are_checked(conn: AsyncConnection) -> None:
+    doc = await make_source_doc(conn)
+    rule = await make_rule(conn, await make_rule_set(conn, uuid.uuid4(), 1), doc, "MF-01")
+    for col, value in (("status", "active"), ("template", "free_text"), ("applies_to", "gold")):
+        coro = conn.execute(
+            text(f"UPDATE rules.rules SET {col} = :v WHERE id = :id"), {"v": value, "id": rule}
+        )
+        await assert_rejected(conn, coro, f"ck_rules_{col}")

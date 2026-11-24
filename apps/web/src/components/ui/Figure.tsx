@@ -26,7 +26,8 @@ export function Figures({ children, className }: { children: ReactNode; classNam
   return (
     <div
       className={cn(
-        "flex border border-rule bg-white [&>*]:flex-1 [&>*]:min-w-0 [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-rule-2",
+        // Side by side from 640px; stacked below, divided by hairlines either way.
+        "flex flex-col border border-rule bg-white sm:flex-row [&>*]:min-w-0 [&>*]:flex-1 [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-rule-2 sm:[&>*:not(:last-child)]:border-r sm:[&>*:not(:last-child)]:border-b-0",
         className,
       )}
     >

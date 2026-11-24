@@ -17,13 +17,18 @@ export function PageHead({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-end gap-10 border-b-2 border-ink pb-5", className)}>
+    <div
+      className={cn(
+        "flex flex-col gap-5 border-b-2 border-ink pb-5 md:flex-row md:items-end md:gap-10",
+        className,
+      )}
+    >
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">
         {eyebrow ? <p className="type-label text-muted">{eyebrow}</p> : null}
-        <h1 className="type-title-xl text-ink">{title}</h1>
+        <h1 className="type-title-xl break-words text-ink">{title}</h1>
         {subtitle ? <p className="type-body-l text-ink-2">{subtitle}</p> : null}
       </div>
-      {actions ? <div className="flex shrink-0 items-center gap-3">{actions}</div> : null}
+      {actions ? <div className="flex flex-wrap items-center gap-3 md:shrink-0">{actions}</div> : null}
     </div>
   );
 }

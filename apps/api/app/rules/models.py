@@ -3,7 +3,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlalchemy import (
     BigInteger,
@@ -26,6 +26,7 @@ from app.core.db import Base
 
 SCHEMA = "rules"
 _UUID_DEFAULT = text("gen_random_uuid()")
+SHORT_CODE_PATTERN = "^[A-Z][A-Z0-9-]{0,11}$"
 
 
 def _pk() -> Mapped[uuid.UUID]:
@@ -34,16 +35,24 @@ def _pk() -> Mapped[uuid.UUID]:
 
 class SourceDoc(Base):
     __tablename__ = "source_docs"
-    __table_args__ = ({"schema": SCHEMA},)
+    __table_args__ = (
+        CheckConstraint(
+            f"short_code IS NULL OR short_code ~ '{SHORT_CODE_PATTERN}'", name="short_code"
+        ),
+        {"schema": SCHEMA},
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     title: Mapped[str] = mapped_column(Text)
+    # Citation code shown in anchors, e.g. "CF" for "CF para 51". Set explicitly, never derived.
+    short_code: Mapped[str | None] = mapped_column(Text, unique=True)
     ref_no: Mapped[str | None] = mapped_column(Text)
     issued_on: Mapped[date | None] = mapped_column(Date)
     url: Mapped[str | None] = mapped_column(Text)
     file: Mapped[bytes | None] = mapped_column(LargeBinary)
     # Unique: the same file is stored once (ingest relies on this under concurrent uploads).
     sha3_256: Mapped[bytes | None] = mapped_column(LargeBinary, index=True, unique=True)
+    pages: Mapped[int | None] = mapped_column(Integer)
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -88,37 +97,75 @@ class RuleSet(Base):
     ledger_seq: Mapped[int | None] = mapped_column(BigInteger)
 
 
+RULE_STATUSES = ("draft", "approved", "rejected", "retired")
+TEMPLATES = (
+    "max_amount",
+    "max_ratio",
+    "min_days",
+    "time_window",
+    "prohibited_charge",
+    "required_disclosure",
+)
+APPLIES_TO = ("microfinance", "all")
+
+
 class Rule(Base):
     __tablename__ = "rules"
+    # Fetch server-set columns (updated_at on UPDATE) with RETURNING, so async code never
+    # lazy-loads them.
+    __mapper_args__: ClassVar[dict[str, Any]] = {"eager_defaults": True}
     __table_args__ = (
         UniqueConstraint("rule_set_id", "code"),
-        CheckConstraint("status IN ('active', 'superseded', 'repealed')", name="status"),
+        CheckConstraint(f"status IN {RULE_STATUSES}", name="status"),
+        CheckConstraint(f"template IN {TEMPLATES}", name="template"),
+        CheckConstraint(f"applies_to IN {APPLIES_TO}", name="applies_to"),
         CheckConstraint("origin IN ('auto', 'manual')", name="origin"),
         CheckConstraint(
-            "effective_to IS NULL OR effective_to >= effective_from", name="effective_range"
+            "effective_to IS NULL OR effective_from IS NULL OR effective_to >= effective_from",
+            name="effective_range",
         ),
+        # Four eyes: the checker is never the maker.
+        CheckConstraint("checked_by IS NULL OR checked_by <> made_by", name="maker_checker"),
         {"schema": SCHEMA},
     )
 
     id: Mapped[uuid.UUID] = _pk()
-    rule_set_id: Mapped[uuid.UUID] = mapped_column(
+    # Set when the rule is published into a rule set (P5); null while in the library.
+    rule_set_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey(f"{SCHEMA}.rule_sets.id", ondelete="CASCADE"), index=True
     )
     code: Mapped[str] = mapped_column(Text)
     title: Mapped[str] = mapped_column(Text)
-    body: Mapped[dict[str, Any]] = mapped_column(JSONB)
-    applies_to: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
-    effective_from: Mapped[date] = mapped_column(Date)
+    template: Mapped[str] = mapped_column(Text)
+    params: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    applies_to: Mapped[str] = mapped_column(Text, server_default=text("'all'"))
+    # Null when the source gives no date we could verify.
+    effective_from: Mapped[date | None] = mapped_column(Date)
     effective_to: Mapped[date | None] = mapped_column(Date)
-    status: Mapped[str] = mapped_column(Text, server_default=text("'active'"))
+    status: Mapped[str] = mapped_column(Text, server_default=text("'draft'"), index=True)
     source_doc_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(f"{SCHEMA}.source_docs.id"))
     source_para: Mapped[str] = mapped_column(Text)
+    para_text: Mapped[str] = mapped_column(Text)
+    # The heading the paragraph sits under, for context. Shown as a heading, never as a quote.
+    section: Mapped[str | None] = mapped_column(Text)
+    # Other paragraphs that qualify this rule: [{"para", "text", "note"}].
+    related: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
     origin: Mapped[str] = mapped_column(Text)
-    drafted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
-    approved_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    made_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    checked_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    review_note: Mapped[str | None] = mapped_column(Text)
     supersedes_rule_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey(f"{SCHEMA}.rules.id")
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ChangeProposal(Base):

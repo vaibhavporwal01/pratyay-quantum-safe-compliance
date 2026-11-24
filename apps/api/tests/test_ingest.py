@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import re
+import uuid
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.db import get_session
+from app.identity.deps import User, get_current_user
 from app.main import app
 from app.rules import ingest as ingest_mod
 from app.rules.ingest import FileTooLarge, IngestError, ingest_pdf
@@ -126,6 +128,7 @@ async def client(session: AsyncSession):
         yield session
 
     app.dependency_overrides[get_session] = _session
+    app.dependency_overrides[get_current_user] = lambda: User(uuid.uuid4(), uuid.uuid4(), "maker", "Maker")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
@@ -153,7 +156,11 @@ async def test_api_upload_and_list_paragraphs(client: AsyncClient) -> None:
     paras = r.json()
     assert len(paras) == body["report"]["paragraphs"]
     assert paras[0]["number"] == "1"
-    assert all(p["label"] is None and p["confidence"] is None for p in paras)
+    # The upload runs the classifier when its model is present; otherwise labels stay empty.
+    if body["classified"]:
+        assert all(p["label"] and p["confidence"] is not None for p in paras)
+    else:
+        assert all(p["label"] is None and p["confidence"] is None for p in paras)
 
 
 async def test_api_rejects_non_pdf(client: AsyncClient) -> None:
@@ -245,3 +252,10 @@ async def test_two_concurrent_uploads_store_one_doc(migrated_db: str) -> None:
         async with engine.begin() as c:  # these sessions committed, so clean up explicitly
             await c.execute(delete(SourceDoc).where(SourceDoc.sha3_256 == digest))
         await engine.dispose()
+
+
+async def test_short_code_is_stored_and_unique(session: AsyncSession) -> None:
+    first = await ingest_pdf(session, CREDIT, title="Credit", short_code="CF")
+    assert first.doc.short_code == "CF"
+    with pytest.raises(IngestError, match="already used"):
+        await ingest_pdf(session, CONDUCT, title="Conduct", short_code="CF")
