@@ -1,0 +1,5 @@
+# Maps phrases in regulation text to fact fields used by rules.
+household_income_annual: ["annual household income"]
+monthly_income: ["monthly household income", "monthly income"]
+total_emi: ["loan repayment obligations", "monthly loan repayments"]
+expected_income: ["income expected from the activity"]
