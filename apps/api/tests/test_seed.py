@@ -34,6 +34,41 @@ async def test_seed_is_idempotent_and_values_come_from_text(session) -> None:
     assert rules["MF-04"].applies_to == "microfinance"
     assert rules["MF-04"].params["scope"] == "microfinance loans"
     assert {str(r.effective_from) for r in rules.values()} == {"2025-11-28"}
+    # KF-03 cites the KFS duty (29(3)); the APR definition (6(1)) is related context.
+    assert rules["KF-03"].source_para == "29(3)"
+    assert [x["para"] for x in rules["KF-03"].related] == ["29", "6(1)"]
+    # MF-05's microfinance scope comes from its section heading, stored as context.
+    assert rules["MF-05"].section == "H. Conduct towards Microfinance borrowers"
+    assert rules["MF-01"].section is None
+
+
+async def test_sources_store_explicit_short_codes(session) -> None:
+    await seed(session)
+    docs = list(await session.scalars(select(SourceDoc)))
+    codes = {d.short_code for d in docs}
+    assert codes == {"CF", "RBC"}
+    # Not derived from the title: "Non-Banking ..." would give "NCF" / "NRBC".
+    assert all(not d.short_code.startswith("N") for d in docs)
+
+
+async def test_seed_replaces_a_rule_whose_citation_changed(session) -> None:
+    await seed(session)
+    kf03 = await session.scalar(
+        select(Rule).where(Rule.code == "KF-03", Rule.status == "approved")
+    )
+    kf03.source_para, kf03.related = "6(1)", []  # as an older seed stored it
+    await session.flush()
+
+    report = await seed(session)
+    assert report.created == ["KF-03"]
+    assert report.corrected == ["KF-03: para 6(1) to 29(3); related none to 29, 6(1)"]
+    rows = list(await session.scalars(
+        select(Rule).where(Rule.code == "KF-03").order_by(Rule.created_at)
+    ))
+    old, new = rows
+    assert old.status == "retired" and old.review_note.startswith("Citation corrected")
+    assert new.status == "approved" and new.source_para == "29(3)"
+    assert new.supersedes_rule_id == old.id
 
 
 def test_header_gives_reference_and_issue_date() -> None:

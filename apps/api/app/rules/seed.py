@@ -3,7 +3,9 @@
     uv run python -m app.rules.seed
 
 Safe to run again: users are keyed on email, documents on their SHA3-256 hash, and rules on
-(document, code) while live. Nothing is duplicated.
+(document, code) while live. Nothing is duplicated. If a live rule's citation (paragraph,
+related paragraphs or section) differs from the one below, the checker retires it with a note
+and the corrected rule replaces it, so the change is in the audit log.
 
 Every number in a seeded rule is read from the stored paragraph by the extractor; the script
 only says which value to take (e.g. "the first percentage"). If the extractor cannot find it,
@@ -53,6 +55,8 @@ class RuleSpec:
     params: dict[str, Any]
     applies_to: str
     related: list[dict[str, str]] = field(default_factory=list)
+    # A heading the paragraph sits under; checked against the PDF text before it is stored.
+    section: str | None = None
 
 
 CF_TITLE = (
@@ -62,6 +66,7 @@ RBC_TITLE = (
     "Reserve Bank of India (Non-Banking Financial Companies – Responsible Business Conduct) "
     "Directions, 2025"
 )
+# Keys are the short codes stored on each source and shown in anchors ("CF para 51").
 DOCS = {"CF": (CF_FILE, CF_TITLE), "RBC": (RBC_FILE, RBC_TITLE)}
 
 KFS_SCOPE = "all new retail and MSME term loans sanctioned on or after October 1, 2024"
@@ -92,11 +97,17 @@ RULES: list[RuleSpec] = [
         ],
     ),
     RuleSpec(
-        "RBC", "6(1)", "KF-03", "APR includes the interest rate and all other charges",
+        "RBC", "29(3)", "KF-03", "KFS includes an APR computation sheet",
         "required_disclosure",
-        {"item": "Annual Percentage Rate (APR)",
-         "includes": ["interest rate", "all other charges associated with the credit facility"]},
+        {"item": "computation sheet of Annual Percentage Rate (APR)",
+         "includes": ["all charges which are levied by the NBFC"],
+         "scope": KFS_SCOPE},
         "all",
+        related=[
+            {"para": "29", "note": KFS_SCOPE_NOTE},
+            {"para": "6(1)", "note": "Definition of APR: the interest rate and all other "
+                                     "charges associated with the credit facility."},
+        ],
     ),
     RuleSpec(
         "RBC", "29(2)", "KF-01", "KFS valid for at least 3 working days",
@@ -136,8 +147,9 @@ RULES: list[RuleSpec] = [
         "time_window",
         {"activity": "calling the borrower", "start": Pick("time", 0), "end": Pick("time", 1)},
         "microfinance",
-        related=[{"para": "91", "note": "Section H, Conduct towards Microfinance borrowers: "
-                                        "these practices are deemed harsh in recovery."}],
+        related=[{"para": "91", "note": "These practices are deemed harsh methods of "
+                                        "recovery."}],
+        section="H. Conduct towards Microfinance borrowers",
     ),
 ]
 
@@ -153,6 +165,36 @@ def read_header(data: bytes) -> tuple[str | None, date | None]:
     when = _DATE_RE.search(text)
     issued = datetime.strptime(when.group(1), "%B %d, %Y").date() if when else None
     return (ref.group(1) if ref else None, issued)
+
+
+def pdf_text(data: bytes) -> str:
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
+        return " ".join(page.extract_text() or "" for page in pdf.pages)
+
+
+def _norm(s: str) -> str:
+    return " ".join(s.split()).casefold()
+
+
+def same_citation(rule: Any, spec: RuleSpec, section: str | None) -> bool:
+    return (
+        rule.source_para == spec.para
+        and (rule.section or None) == section
+        and [r["para"] for r in rule.related] == [r["para"] for r in spec.related]
+    )
+
+
+def citation_change(rule: Any, spec: RuleSpec, section: str | None) -> str:
+    """What differs between a live rule's citation and the spec, in plain words."""
+    changes = []
+    if rule.source_para != spec.para:
+        changes.append(f"para {rule.source_para} to {spec.para}")
+    if (rule.section or None) != section:
+        changes.append(f"section set to {section!r}" if section else "section removed")
+    old, new = [r["para"] for r in rule.related], [r["para"] for r in spec.related]
+    if old != new:
+        changes.append(f"related {', '.join(old) or 'none'} to {', '.join(new) or 'none'}")
+    return "; ".join(changes)
 
 
 def resolve(value: Any, text: str, path: str, missing: list[str]) -> Any:
@@ -175,6 +217,7 @@ class SeedReport:
     users_added: int = 0
     docs: dict[str, str] = field(default_factory=dict)
     created: list[str] = field(default_factory=list)
+    corrected: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     left_out: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
@@ -187,15 +230,18 @@ async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
     maker = User(maker_row.id, maker_row.org_id, maker_row.role, maker_row.name)
     checker = User(checker_row.id, checker_row.org_id, checker_row.role, checker_row.name)
 
-    doc_ids, issued = {}, {}
+    doc_ids, issued, texts = {}, {}, {}
     for key, (filename, title) in DOCS.items():
         data = (sources / filename).read_bytes()
         ref_no, issued_on = read_header(data)
+        texts[key] = _norm(pdf_text(data))
         result = await service.ingest_pdf(
-            session, data, title=title, ref_no=ref_no, issued_on=issued_on, uploaded_by=maker.id
+            session, data, title=title, short_code=key, ref_no=ref_no, issued_on=issued_on,
+            uploaded_by=maker.id,
         )
         doc = result.doc
-        # A copy stored before this seed may lack header details: fill only what is empty.
+        # A copy stored before this seed may lack these details: fill only what is empty.
+        doc.short_code = doc.short_code or key
         doc.ref_no = doc.ref_no or ref_no
         doc.issued_on = doc.issued_on or issued_on
         doc.pages = doc.pages or result.report.pages
@@ -211,11 +257,25 @@ async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
             except service.ModelNotFound:
                 report.problems.append(f"{key}: classifier model not found; labels left empty")
 
+    await session.flush()
     for spec in RULES:
         doc_id = doc_ids[spec.doc]
-        if await service.find_rule(session, doc_id, spec.code):
+        section = spec.section
+        if section and _norm(section) not in texts[spec.doc]:
+            report.problems.append(f"{spec.code}: section heading not found in the PDF; left out")
+            section = None
+        live = await service.find_rule(session, doc_id, spec.code)
+        if live and same_citation(live, spec, section):
             report.skipped.append(spec.code)
             continue
+        if live:
+            change = citation_change(live, spec, section)
+            note = f"Citation corrected ({change}); replaced by the seeded rule."
+            if live.status == "approved":
+                await service.retire(session, checker, live.id, note)
+            else:
+                await service.reject(session, checker, live.id, note)
+            report.corrected.append(f"{spec.code}: {change}")
         para = await service.get_paragraph_by_number(session, doc_id, spec.para)
         if para is None:
             report.problems.append(f"{spec.code}: {spec.doc} para {spec.para} not found")
@@ -227,7 +287,8 @@ async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
             "code": spec.code, "title": spec.title, "template": spec.template,
             "params": params, "applies_to": spec.applies_to,
             "effective_from": issued[spec.doc], "paragraph_id": para.id,
-            "related": spec.related, "origin": "manual",
+            "related": spec.related, "origin": "manual", "section": section,
+            "supersedes_rule_id": live.id if live else None,
         })
         if missing:
             report.created.append(f"{spec.code} (draft: values missing)")
@@ -246,6 +307,8 @@ async def main() -> int:
         print(f"{key}: {line}")
     print(f"Rules created: {', '.join(report.created) or 'none'}")
     print(f"Rules already present: {', '.join(report.skipped) or 'none'}")
+    for line in report.corrected:
+        print(f"Corrected: {line}")
     for line in report.left_out:
         print(f"Left out: {line}")
     for line in report.problems:
