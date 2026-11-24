@@ -92,3 +92,14 @@ export function LeaderLine({ label, value }: { label: string; value: ReactNode }
     </div>
   );
 }
+
+/** The heading a paragraph sits under: context for its scope, shown as a heading, never quoted. */
+export function SectionHeading({ section }: { section: string | null | undefined }) {
+  if (!section) return null;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <p className="type-label text-muted">Section</p>
+      <h3 className="type-body-medium break-words text-ink">{section}</h3>
+    </div>
+  );
+}

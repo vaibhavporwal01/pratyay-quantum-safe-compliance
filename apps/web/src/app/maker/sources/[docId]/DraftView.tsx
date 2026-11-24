@@ -68,7 +68,7 @@ export function DraftView() {
       />
       <div className="flex flex-col gap-3">
         <Figures>
-          <Figure label="1 · Uploaded" value={<span className="block truncate">{shortDocName(d.title)}</span>} note={`SHA3-256 ${shortHash(d.sha3_256)}${d.pages ? ` · ${d.pages} pages` : ""}`} />
+          <Figure label="1 · Uploaded" value={<span title={d.title} className="line-clamp-2 block whitespace-normal break-words">{shortDocName(d.title)}</span>} note={`SHA3-256 ${shortHash(d.sha3_256)}${d.pages ? ` · ${d.pages} pages` : ""}`} />
           <Figure label="2 · Paragraphs" value={d.paragraphs} note={d.ref_no ?? "Reference not recorded"} />
           <Figure
             label="3 · Requirements"

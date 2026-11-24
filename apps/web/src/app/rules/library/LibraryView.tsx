@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useMe } from "@/components/app/RoleShell";
-import { LeaderLine, Quote, RulePreview, RuleStatusTag, TestRows } from "@/components/app/RuleParts";
+import { LeaderLine, Quote, RulePreview, RuleStatusTag, SectionHeading, TestRows } from "@/components/app/RuleParts";
 import { DataCard, Empty, ErrorState } from "@/components/app/States";
 import { Button, Card, Field, PageHead, Tag } from "@/components/ui";
 import { api, failureMessage } from "@/lib/api/client";
@@ -153,6 +153,7 @@ function RuleDetail({ rule, canRetire, onRetired }: { rule: Rule; canRetire: boo
       tag={<RuleStatusTag status={rule.status} />}
     >
       <div className="flex flex-col gap-4 pt-3">
+        <SectionHeading section={rule.section} />
         <p className="type-label text-muted">{`Source text · ${citation(rule)}`}</p>
         <Quote note={rule.source_doc_ref ? `${rule.source_doc_title} (${rule.source_doc_ref})` : rule.source_doc_title}>
           {rule.para_text}

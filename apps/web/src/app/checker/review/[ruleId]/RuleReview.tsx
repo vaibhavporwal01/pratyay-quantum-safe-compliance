@@ -3,7 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useMe } from "@/components/app/RoleShell";
-import { LeaderLine, Quote, RulePreview, RuleStatusTag, TestRows } from "@/components/app/RuleParts";
+import { LeaderLine, Quote, RulePreview, RuleStatusTag, SectionHeading, TestRows } from "@/components/app/RuleParts";
 import { Empty, ErrorState, Loading } from "@/components/app/States";
 import { Button, Card, Field, Icon, PageHead, Status, Tag } from "@/components/ui";
 import { api, ApiFailure, failureMessage } from "@/lib/api/client";
@@ -85,6 +85,7 @@ export function RuleReview() {
               <LeaderLine label="In force from" value={formatDate(r.effective_from)} />
               <LeaderLine label="Reference" value={r.source_doc_ref ?? "Not recorded"} />
             </div>
+            <SectionHeading section={r.section} />
             <p className="type-label text-muted">Para {r.source_para} · original text</p>
             <Quote>{r.para_text}</Quote>
             {r.related.map((x) => (

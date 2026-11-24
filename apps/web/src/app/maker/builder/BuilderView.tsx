@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { LabelTag, MarkedText, Quote, RulePreview, RuleStatusTag, TestRows } from "@/components/app/RuleParts";
+import { LabelTag, MarkedText, Quote, RulePreview, RuleStatusTag, SectionHeading, TestRows } from "@/components/app/RuleParts";
 import { Empty, ErrorState, Loading } from "@/components/app/States";
 import { Button, Card, Field, PageHead, Tag } from "@/components/ui";
 import { api, ApiFailure, failureMessage } from "@/lib/api/client";
@@ -170,6 +170,7 @@ function BuilderForm({ suggestion, rule }: { suggestion: Suggestion; rule?: Rule
           tag={<LabelTag paragraph={paragraph} />}
         >
           <div className="flex flex-col gap-3 pt-3">
+            <SectionHeading section={rule?.section} />
             <Quote note="The original text. Marked words are the values the extractor found; only these can be used as numbers.">
               <MarkedText text={paragraph.text} values={suggestion.values} />
             </Quote>

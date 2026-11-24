@@ -27,16 +27,38 @@ const columns: Column<SourceDoc>[] = [
     key: "status",
     header: "Status",
     kind: "node",
-    render: (d) =>
-      d.paragraphs === 0 ? (
-        <Tag tone="fail">No paragraphs</Tag>
-      ) : d.labels.unlabelled === d.paragraphs ? (
-        <Tag tone="stamp">Parsed</Tag>
-      ) : (
-        <Tag tone="pass">Classified</Tag>
-      ),
+    render: (d) => <SourceStatus doc={d} />,
   },
 ];
+
+function SourceStatus({ doc: d }: { doc: SourceDoc }) {
+  if (d.paragraphs === 0) return <Tag tone="fail">No paragraphs</Tag>;
+  if (d.labels.unlabelled === d.paragraphs) return <Tag tone="stamp">Parsed</Tag>;
+  return <Tag tone="pass">Classified</Tag>;
+}
+
+/** Below 640px each document is a stacked card instead of the wide table. */
+export function SourceCards({ docs }: { docs: SourceDoc[] }) {
+  return (
+    <ul aria-label="Regulations on file" className="flex flex-col">
+      {docs.map((d) => (
+        <li key={d.id} className="flex flex-col gap-1.5 border-b border-rule-2 py-3.5">
+          <div className="flex items-start justify-between gap-3">
+            <Link href={`/maker/sources/${d.id}`} className="min-w-0 break-words type-body-medium text-ink underline-offset-2 hover:underline">
+              {shortDocName(d.title)}
+            </Link>
+            <SourceStatus doc={d} />
+          </div>
+          <p className="type-mono break-words text-ink-2">{d.ref_no ?? "Reference not recorded"}</p>
+          <p className="type-small text-ink-2">
+            {`${d.pages ?? "Unknown"} pages · ${d.paragraphs} paragraphs · uploaded ${formatDate(d.uploaded_at)}`}
+          </p>
+          <p className="type-mono text-muted">{`SHA3-256 ${shortHash(d.sha3_256)}`}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export function SourcesView() {
   const docs = useApi<SourceDoc[]>("/rules/sources");
@@ -62,7 +84,11 @@ export function SourcesView() {
         }
       >
         {(data) => (
-          <div className="overflow-x-auto">
+          <>
+          <div className="sm:hidden">
+            <SourceCards docs={data} />
+          </div>
+          <div className="hidden overflow-x-auto sm:block">
             <Table
               className="min-w-[1080px]"
               caption="Regulations on file"
@@ -72,6 +98,7 @@ export function SourcesView() {
               footer={<TableCount>Uploading the same file again returns the stored copy; the hash is unique. Open a document to draft rules from it.</TableCount>}
             />
           </div>
+          </>
         )}
       </DataCard>
     </div>
