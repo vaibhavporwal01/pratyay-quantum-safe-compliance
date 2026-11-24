@@ -12,7 +12,7 @@ import asyncpg
 import pytest
 from alembic.config import Config
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
 
 from alembic import command
 from app.core.config import settings
@@ -76,3 +76,13 @@ async def conn(migrated_db: str) -> AsyncIterator[AsyncConnection]:
         finally:
             await trans.rollback()
     await engine.dispose()
+
+
+@pytest.fixture
+async def session(conn: AsyncConnection) -> AsyncIterator[AsyncSession]:
+    """An ORM session on the rolled-back test connection. Commits inside the code under test
+    become savepoint releases, so nothing outlives the test."""
+    async with AsyncSession(
+        bind=conn, join_transaction_mode="create_savepoint", expire_on_commit=False
+    ) as s:
+        yield s
