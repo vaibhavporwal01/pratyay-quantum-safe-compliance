@@ -68,7 +68,7 @@ export function DecisionReceipt({
   return (
     <article
       aria-label={`Decision receipt for ${name}, ${applicationId}`}
-      className={cn("receipt-shadow relative flex w-[360px] flex-col", className)}
+      className={cn("receipt-shadow relative flex w-[360px] max-w-full flex-col", className)}
     >
       <Perforation edge="top" />
       <div className="flex flex-col gap-4 bg-white px-6 pt-[18px] pb-[22px]">
