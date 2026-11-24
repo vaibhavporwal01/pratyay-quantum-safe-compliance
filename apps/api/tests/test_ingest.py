@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import re
+import uuid
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.db import get_session
+from app.identity.deps import User, get_current_user
 from app.main import app
 from app.rules import ingest as ingest_mod
 from app.rules.ingest import FileTooLarge, IngestError, ingest_pdf
@@ -126,6 +128,7 @@ async def client(session: AsyncSession):
         yield session
 
     app.dependency_overrides[get_session] = _session
+    app.dependency_overrides[get_current_user] = lambda: User(uuid.uuid4(), uuid.uuid4(), "maker", "Maker")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
