@@ -12,17 +12,28 @@ import { checkCode, checkMobile, normaliseMobile } from "@/lib/validation";
 
 const BORROWER_ACCOUNTS: TestAccount[] = [{ name: "Rekha K.", role: "Borrower", value: "98765 00417" }];
 
-type Sent = { otpId: string; resendAt: number };
+type Sent = { otpId: string; resendAt: number; waitSeconds: number };
 type Errors = { mobile?: string; code?: string; form?: string };
 
-function useSecondsUntil(target: number | null): number {
-  const [now, setNow] = useState(() => Date.now());
+/**
+ * Seconds until `sent.resendAt`. The clock is only read inside the effect, so
+ * prerendering stays deterministic.
+ */
+function useResendCountdown(sent: Sent | null): number {
+  const [tick, setTick] = useState<{ at: number; left: number } | null>(null);
   useEffect(() => {
-    if (target === null) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [target]);
-  return target === null ? 0 : Math.max(0, Math.ceil((target - now) / 1000));
+    if (!sent) return;
+    const update = () =>
+      setTick({ at: sent.resendAt, left: Math.max(0, Math.ceil((sent.resendAt - Date.now()) / 1000)) });
+    const first = window.setTimeout(update, 0);
+    const timer = window.setInterval(update, 1000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+    };
+  }, [sent]);
+  if (!sent) return 0;
+  return tick && tick.at === sent.resendAt ? tick.left : sent.waitSeconds;
 }
 
 export function SignUpForm() {
@@ -32,7 +43,7 @@ export function SignUpForm() {
   const [sent, setSent] = useState<Sent | null>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
-  const resendIn = useSecondsUntil(sent?.resendAt ?? null);
+  const resendIn = useResendCountdown(sent);
 
   async function sendCode() {
     const problem = checkMobile(mobile);
@@ -48,7 +59,11 @@ export function SignUpForm() {
       setErrors({ form: res.error.message });
       return false;
     }
-    setSent({ otpId: res.data.otp_id, resendAt: Date.now() + res.data.resend_after_seconds * 1000 });
+    setSent({
+      otpId: res.data.otp_id,
+      resendAt: Date.now() + res.data.resend_after_seconds * 1000,
+      waitSeconds: res.data.resend_after_seconds,
+    });
     setCode("");
     return true;
   }
