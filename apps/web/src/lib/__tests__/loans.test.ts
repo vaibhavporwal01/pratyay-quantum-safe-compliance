@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appKind, appKindLabel, monthlyRate, resultSummary, resultValue, toPaise, type RuleResult } from "../api/loans";
+import { appKind, appKindLabel, monthlyRate, resultSummary, resultValue, rulesUsed, toPaise, type RuleResult } from "../api/loans";
 import { canAccess } from "../roles";
 
 const base: Omit<RuleResult, "code" | "status" | "values"> = {
@@ -31,6 +31,11 @@ describe("loan helpers", () => {
     expect(resultValue(pass)).toBe("49.95% ≤ 50%");
     const later = { ...base, code: "MF-05", status: "not_checked" as const, stage: "recovery" as const, values: {} };
     expect(resultSummary([fail, pass, later])).toBe("1 pass · 1 fail · 1 later stage");
+  });
+
+  it("names the rules a decision used", () => {
+    expect(rulesUsed({ in_force: 8, checked: 5, versions: [], deciding: ["MF-02 v1"] })).toBe("8 rules · MF-02 v1 decided");
+    expect(rulesUsed({ in_force: 8, checked: 5, versions: [], deciding: [] })).toBe("8 rules · all pass");
   });
 
   it("marks an application by its decision first", () => {

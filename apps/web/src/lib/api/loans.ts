@@ -154,7 +154,28 @@ export type Product = {
   fees: { name: string; bps?: number; paise?: number; assumed?: boolean }[];
 };
 
-export type DecisionRow = { application: Application; decision: Decision; final_evaluation: Evaluation | null };
+/** GET /loans/decisions: decided applications only. */
+export type DecisionRow = {
+  application: Application;
+  decision: Decision;
+  final_evaluation: Evaluation | null;
+  rules: {
+    /** Rules in force on the day, every stage. */
+    in_force: number;
+    /** Of those, checked at origination (pass, fail or refer). */
+    checked: number;
+    /** "MF-02 v1", every rule in force with its version. */
+    versions: string[];
+    /** Rules that failed or referred at the amount asked for: what decided the outcome. */
+    deciding: string[];
+  };
+};
+
+/** "8 rules · MF-02 v1 decided", or "8 rules · all pass". */
+export function rulesUsed(r: DecisionRow["rules"]): string {
+  const n = `${r.in_force} rule${r.in_force === 1 ? "" : "s"}`;
+  return r.deciding.length ? `${n} · ${r.deciding.join(", ")} decided` : `${n} · all pass`;
+}
 
 export type Replay = {
   application: Application;

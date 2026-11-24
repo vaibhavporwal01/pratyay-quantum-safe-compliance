@@ -3,22 +3,29 @@
 import Link from "next/link";
 import { DataCard, Empty, ErrorState, Loading } from "@/components/app/States";
 import { Button, Figure, Figures, PageHead, Status, Table, Tag, type Column } from "@/components/ui";
-import { dateTime, EVENT_LABEL, finalLabel, money, shortDateTime, type Counts, type DecisionRow, type LoanEvent } from "@/lib/api/loans";
+import { dateTime, EVENT_LABEL, finalLabel, money, rulesUsed, shortDateTime, type Counts, type DecisionRow, type LoanEvent } from "@/lib/api/loans";
 import { useApi } from "@/lib/useApi";
 
 const decisionColumns: Column<DecisionRow>[] = [
   { key: "ref", header: "Subject", width: 130, kind: "mono", render: (r) => r.application.ref },
   { key: "name", header: "Borrower", width: 120, kind: "primary", render: (r) => r.application.borrower_name },
-  { key: "outcome", header: "Outcome", width: 190, render: (r) => (r.decision.outcome ? finalLabel(r.application.status) : "With the checker") },
+  { key: "outcome", header: "Outcome", width: 190, render: (r) => finalLabel(r.application.status) },
   { key: "amount", header: "Amount", width: 90, kind: "mono", render: (r) => money(r.decision.approved_paise ?? r.decision.recommended_paise) },
   {
     key: "rules",
     header: "Rules used",
-    width: 170,
-    kind: "mono",
-    render: (r) => r.final_evaluation?.rules_used.filter((u) => ["MF-01", "MF-02"].includes(u.code)).map((u) => `${u.code} v${u.version}`).join(" · ") ?? "",
+    width: 230,
+    kind: "node",
+    render: (r) => (
+      <span className="flex flex-col gap-0.5">
+        <span className="type-mono text-ink-2">{rulesUsed(r.rules)}</span>
+        <span className="type-caption text-muted" title={r.rules.versions.join(", ")}>
+          {`${r.rules.checked} checked at origination · ${r.rules.versions.join(", ")}`}
+        </span>
+      </span>
+    ),
   },
-  { key: "time", header: "Time", width: 110, kind: "mono", render: (r) => shortDateTime(r.decision.decided_at ?? r.decision.recommended_at) },
+  { key: "time", header: "Decided", width: 110, kind: "mono", render: (r) => shortDateTime(r.decision.decided_at!) },
   // HOOK(Pulkit): hash, previous hash and key id come from the ledger entry (ledger_seq).
   { key: "seal", header: "Seal", kind: "node", render: (r) => <Status status="pending" label={r.decision.ledger_seq === null ? "Signature pending" : `#${r.decision.ledger_seq}`} /> },
   {
@@ -72,10 +79,17 @@ export function LedgerView() {
         <Figure label="Steps recorded" value={c.events} note="submitted to decided" />
         <Figure label="Signed" value={c.signed} note="signing not enabled" />
       </Figures>
-      <DataCard eyebrow="Newest first" title="Decisions" tag={<Tag>Unsigned</Tag>} state={decisions} isEmpty={(d) => d.length === 0} empty={<Empty title="No decisions yet" />}>
+      <DataCard
+        eyebrow="Decided by a checker · newest first"
+        title={decisions.data ? `Decisions · ${decisions.data.length}` : "Decisions"}
+        tag={<Tag>Unsigned</Tag>}
+        state={decisions}
+        isEmpty={(d) => d.length === 0}
+        empty={<Empty title="No decisions yet">Applications appear here once a checker decides them. Recommendations still with a checker are not listed.</Empty>}
+      >
         {(rows) => (
           <div className="overflow-x-auto">
-            <Table className="min-w-[1040px]" caption="Decisions" columns={decisionColumns} rows={rows} rowKey={(r) => r.decision.id} />
+            <Table className="min-w-[1120px]" caption="Decisions" columns={decisionColumns} rows={rows} rowKey={(r) => r.decision.id} />
           </div>
         )}
       </DataCard>
