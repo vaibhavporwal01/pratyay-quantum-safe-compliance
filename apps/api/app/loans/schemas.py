@@ -34,3 +34,11 @@ class DecideIn(BaseModel):
     outcome: Literal["approve", "modify", "reject"]
     amount_paise: int | None = Field(default=None, gt=0, le=MAX_PAISE)
     note: str | None = Field(default=None, max_length=2000)
+
+
+class PreviewIn(BaseModel):
+    product: str = Field(min_length=1, max_length=10)
+    amount_paise: int | None = Field(default=None, gt=0, le=MAX_PAISE)
+    tenor_months: int | None = Field(default=None, gt=0, le=120)
+    household_income_annual_paise: int | None = Field(default=None, ge=0, le=MAX_PAISE)
+    existing_monthly_repayments_paise: int | None = Field(default=None, ge=0, le=MAX_PAISE)

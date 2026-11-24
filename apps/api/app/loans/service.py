@@ -200,10 +200,18 @@ async def detail(session: AsyncSession, app: Application) -> dict[str, Any]:
         ids |= {dec.officer_id, dec.checker_id}
     names = await identity.user_names(session, ids)
     final_ev = await session.get(Evaluation, dec.evaluation_id) if dec and dec.evaluation_id else None
+    at_recommended = None
+    if dec and dec.recommended_paise and dec.recommended_paise != app.amount_paise:
+        at_recommended = await session.scalar(
+            select(Evaluation).where(Evaluation.application_id == app.id,
+                                     Evaluation.amount_paise == dec.recommended_paise)
+            .order_by(Evaluation.created_at.desc()).limit(1)
+        )
     return {
         "application": _app_dict(app) | {"submitted_by_name": names.get(app.submitted_by)},
         "evaluation": evaluation_dict(ev),
         "final_evaluation": evaluation_dict(final_ev),
+        "recommended_evaluation": evaluation_dict(at_recommended),
         "decision": _decision_dict(dec, names) if dec else None,
         "events": [
             {"id": e.id, "action": e.action, "actor_id": e.actor_id,
@@ -418,6 +426,67 @@ async def decide(
         "signature": "pending" if dec.ledger_seq is None else "signed",
     })
     return app
+
+
+async def preview(session: AsyncSession, user: User, data: dict[str, Any],
+                  on_date: date | None = None) -> dict[str, Any]:
+    """Run the engine on a draft application without saving anything ("live checks")."""
+    product = get_product(data["product"])
+    if product is None:
+        raise Invalid(f"Unknown product {data['product']!r}.")
+    facts = {
+        "product_category": product["category"],
+        "amount_paise": data.get("amount_paise"),
+        "tenor_months": data.get("tenor_months"),
+        "rate_bps_month": product["rate_bps_month"],
+        "fees": product["fees"],
+        "prepayment_charge_paise": product["prepayment_charge_paise"],
+        "collateral": product["collateral"],
+        "household_income_annual_paise": data.get("household_income_annual_paise"),
+        "existing_monthly_repayments_paise": data.get("existing_monthly_repayments_paise"),
+        "offer_step_paise": product["offer_step_paise"],
+    }
+    result = await rules.evaluate_application(session, facts, on_date or today())
+    return result.as_dict()
+
+
+async def replay(session: AsyncSession, user: User, app_id: uuid.UUID) -> dict[str, Any]:
+    """Re-run the stored facts of the decision's evaluation on its own date and compare.
+
+    A real check that needs no signature: the same inputs and the rules in force that day must
+    give the same result. Rules approved or retired since then change "rules in force", so a
+    difference names the rules that differ."""
+    app = await get_application(session, user, app_id)
+    dec = await get_decision(session, app.id)
+    ev = None
+    if dec and dec.evaluation_id:
+        ev = await session.get(Evaluation, dec.evaluation_id)
+    ev = ev or await latest_evaluation(session, app)
+    if ev is None:
+        raise NotFound("No evaluation to replay")
+    again = await rules.evaluate_application(session, ev.facts, ev.on_date)
+    stored = {r["code"]: r["status"] for r in ev.results}
+    now = {r.code: r.status for r in again.results}
+    stored_rules = {f"{r['code']} v{r['version']}" for r in ev.rules_used}
+    now_rules = {f"{r['code']} v{r['version']}" for r in again.rules_used}
+    return {
+        "application": _app_dict(app),
+        "evaluation_id": ev.id,
+        "on_date": ev.on_date,
+        "amount_paise": ev.amount_paise,
+        "stored_outcome": ev.outcome,
+        "replayed_outcome": again.outcome,
+        "same_outcome": ev.outcome == again.outcome,
+        "same_results": stored == now,
+        "different_results": sorted(c for c in stored.keys() | now.keys()
+                                    if stored.get(c) != now.get(c)),
+        "same_rules": stored_rules == now_rules,
+        "rules_used": sorted(stored_rules),
+        "rules_now": sorted(now_rules),
+        "signature": "signed" if dec and dec.ledger_seq is not None else "pending",
+        "decision": _decision_dict(dec, await identity.user_names(
+            session, {dec.officer_id, dec.checker_id})) if dec else None,
+    }
 
 
 # ---- staff views -------------------------------------------------------------------------

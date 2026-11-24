@@ -83,8 +83,8 @@ def fee_paise(amount_paise: int, fee: dict) -> int:
     return to_rupee(Fraction(amount_paise * int(fee["bps"]), BPS))
 
 
-def apr_percent(net_disbursal_paise: int, emi_paise: Fraction, months: int) -> Decimal:
-    """12 x monthly IRR, in percent, two decimals. Bisection on the annuity equation."""
+def monthly_irr(net_disbursal_paise: int, emi_paise: Fraction, months: int) -> Decimal:
+    """Monthly IRR as a fraction (0.02089...). Bisection on the annuity equation."""
     if net_disbursal_paise <= 0:
         raise ValueError("net disbursal must be positive")
     with localcontext() as ctx:
@@ -92,7 +92,7 @@ def apr_percent(net_disbursal_paise: int, emi_paise: Fraction, months: int) -> D
         net = Decimal(net_disbursal_paise)
         e = Decimal(emi_paise.numerator) / Decimal(emi_paise.denominator)
         if e * months <= net:
-            return Decimal("0.00")
+            return Decimal(0)
 
         def pv(m: Decimal) -> Decimal:
             return e * (1 - (1 + m) ** -months) / m
@@ -104,7 +104,13 @@ def apr_percent(net_disbursal_paise: int, emi_paise: Fraction, months: int) -> D
                 lo = mid
             else:
                 hi = mid
-        return (lo * 12 * 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return lo
+
+
+def apr_percent(net_disbursal_paise: int, emi_paise: Fraction, months: int) -> Decimal:
+    """12 x monthly IRR, in percent, two decimals."""
+    m = monthly_irr(net_disbursal_paise, emi_paise, months)
+    return (m * 12 * 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def percent(num: Fraction | int, den: Fraction | int, places: int = 1) -> str:

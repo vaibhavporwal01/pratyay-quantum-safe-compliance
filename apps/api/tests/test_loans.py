@@ -235,3 +235,30 @@ async def test_seed_loans_covers_every_path(session, monkeypatch) -> None:
     assert ev.outcome == "fail" and ev.offer["amount_paise"] > 0
     created, present = await seed_loans(session)
     assert created == [] and len(present) == 6
+
+
+async def test_preview_saves_nothing_and_replay_matches(api, session) -> None:
+    api.as_(BORROWER)
+    r = await api.post("/api/v1/loans/preview", json={
+        "product": "MFL", "amount_paise": 80_000_00, "tenor_months": 24,
+        "household_income_annual_paise": 2_64_000_00,
+        "existing_monthly_repayments_paise": 7_500_00})
+    assert r.status_code == 200, r.text
+    assert r.json()["outcome"] == "fail" and r.json()["offer"]["amount_paise"] == 66_000_00
+    r = await api.post("/api/v1/loans/preview", json={"product": "MFL"})
+    assert r.json()["outcome"] == "refer"
+    assert (await session.scalars(select(Event))).all() == []
+
+    d = await submit(api, OFFICER, borrower_name="Sunita D.", amount_paise=30_000_00,
+                     tenor_months=12, existing_monthly_repayments_paise=2_000_00)
+    app_id = d["application"]["id"]
+    await api.post(f"/api/v1/loans/applications/{app_id}/recommend",
+                   json={"recommendation": "approve"})
+    api.as_(CHECKER)
+    await api.post(f"/api/v1/loans/applications/{app_id}/decide", json={"outcome": "approve"})
+    api.as_(AUDITOR)
+    rep = (await api.get(f"/api/v1/loans/applications/{app_id}/replay")).json()
+    assert rep["same_outcome"] and rep["same_results"] and rep["same_rules"]
+    assert rep["signature"] == "pending"
+    api.as_(BORROWER)
+    assert (await api.get(f"/api/v1/loans/applications/{app_id}/replay")).status_code == 403

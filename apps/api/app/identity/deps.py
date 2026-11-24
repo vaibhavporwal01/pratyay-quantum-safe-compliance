@@ -1,9 +1,9 @@
 """Current user and role checks (contract in docs/contracts.md, owned by Vishnukant).
 
 STUB until the identity module lands. There is no sign-in yet: in development
-(APP_ENV=development) the user is the seeded Lender A user for the role in the
-`pratyay_dev_role` cookie, falling back to DEV_USER_ROLE. Anywhere else every request is
-unauthenticated.
+(APP_ENV=development), or when ALLOW_ROLE_SWITCHER=true, the user is the seeded Lender A user
+for the role in the `pratyay_dev_role` cookie, falling back to DEV_USER_ROLE. Otherwise every
+request is unauthenticated.
 """
 
 import logging
@@ -24,7 +24,9 @@ log = logging.getLogger("pratyay.stub")
 DEV_ROLE_COOKIE = "pratyay_dev_role"
 _dev_role: ContextVar[str | None] = ContextVar("pratyay_dev_role", default=None)
 
-__all__ = ["DEV_ROLE_COOKIE", "ROLES", "User", "get_current_user", "require_role"]
+__all__ = [
+    "DEV_ROLE_COOKIE", "ROLES", "User", "get_current_user", "require_role", "stand_in_enabled",
+]
 
 
 @dataclass
@@ -44,9 +46,14 @@ async def dev_role_middleware(request: Request, call_next):
         _dev_role.reset(token)
 
 
+def stand_in_enabled() -> bool:
+    """The cookie stand-in works in development, or anywhere ALLOW_ROLE_SWITCHER is true."""
+    return settings.app_env == "development" or settings.allow_role_switcher
+
+
 def dev_role() -> str | None:
-    """The role the development stand-in signs in as, or None outside development."""
-    if settings.app_env != "development":
+    """The role the stand-in signs in as, or None when the stand-in is off."""
+    if not stand_in_enabled():
         return None
     for role in (_dev_role.get(), settings.dev_user_role):
         if role in ROLES:

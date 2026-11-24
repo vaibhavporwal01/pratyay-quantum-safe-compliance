@@ -117,7 +117,8 @@ def build_kfs(facts: dict[str, Any], on_date: date, validity_rule: Rule | None,
     ]
     fees_total = sum(f["paise"] for f in fees)
     net = amount - fees_total
-    total_interest = fin.to_rupee(exact * months - amount)
+    # What the borrower pays: the rounded EMI, every month.
+    total_payable = emi * months
     first_due = fin.add_months(on_date, 1)
     tenor_days = (fin.add_months(on_date, months) - on_date).days
     kfs: dict[str, Any] = {
@@ -133,12 +134,15 @@ def build_kfs(facts: dict[str, Any], on_date: date, validity_rule: Rule | None,
         "fees": fees,
         "fees_total_paise": fees_total,
         "net_disbursal_paise": net,
-        "total_interest_paise": total_interest,
-        "total_payable_paise": amount + total_interest,
+        "total_interest_paise": total_payable - amount,
+        "total_payable_paise": total_payable,
+        "monthly_irr_percent": str((fin.monthly_irr(net, exact, months) * 100).quantize(
+            fin.Decimal("0.001"), rounding=fin.ROUND_HALF_UP)),
         "apr_percent": str(fin.apr_percent(net, exact, months)),
         "apr_method": "12 x monthly IRR of the net disbursal against the unrounded EMI "
                       "(RBC Annex I: IRR approach, reducing balance).",
-        "rounding": "EMI rounded to the nearest rupee, half up. Fees rounded to the rupee.",
+        "rounding": "EMI rounded to the nearest rupee, half up; totals use the rounded EMI. "
+                    "Fees rounded to the rupee. APR uses the unrounded EMI.",
         "issued_on": on_date.isoformat(),
         "valid_until": None,
         "validity_working_days": None,

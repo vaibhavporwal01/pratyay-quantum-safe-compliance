@@ -38,6 +38,7 @@ async def test_worked_example_app_2026_0142(session) -> None:
     assert kfs["fees_total_paise"] == 800_00
     assert kfs["net_disbursal_paise"] == 79_200_00
     assert kfs["apr_percent"] == "25.07"
+    assert kfs["total_payable_paise"] == 24 * 4_230_00
     assert kfs["rate_year_percent"] == "24.00"
     assert kfs["valid_until"] == "2026-11-30"  # Wed + 3 working days, over a weekend
     assert kfs["validity_working_days"] == 3
@@ -45,6 +46,10 @@ async def test_worked_example_app_2026_0142(session) -> None:
     assert offer["kfs"]["apr_percent"] == "25.07"
     assert offer["kfs"]["fees_total_paise"] == 660_00
     assert offer["kfs"]["emi_paise"] == 3_489_00
+    assert offer["kfs"]["net_disbursal_paise"] == 65_340_00
+    assert offer["kfs"]["total_payable_paise"] == 83_736_00
+    assert offer["kfs"]["total_interest_paise"] == 17_736_00
+    assert offer["kfs"]["monthly_irr_percent"] == "2.089"
 
     used = {r["code"]: r["version"] for r in ev.rules_used}
     assert used["MF-02"] == 1 and len(used) == 8

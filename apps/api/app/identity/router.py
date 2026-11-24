@@ -5,8 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from app.core.config import settings
-from app.identity.deps import User, get_current_user
+from app.identity.deps import User, get_current_user, stand_in_enabled
 
 router = APIRouter(prefix="/me", tags=["identity"])
 
@@ -23,5 +22,5 @@ class MeOut(BaseModel):
 async def me(user: Annotated[User, Depends(get_current_user)]) -> MeOut:
     return MeOut(
         id=str(user.id), org_id=str(user.org_id), role=user.role, name=user.name,
-        dev_stand_in=settings.app_env == "development",
+        dev_stand_in=stand_in_enabled(),
     )

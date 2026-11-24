@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_session
 from app.identity.deps import User, require_role
 from app.loans import service
-from app.loans.schemas import ApplicationIn, DecideIn, FactsIn, RecommendIn
+from app.loans.schemas import ApplicationIn, DecideIn, FactsIn, PreviewIn, RecommendIn
 
 router = APIRouter(prefix="/loans", tags=["loans"])
 
@@ -51,6 +51,23 @@ async def submit(body: ApplicationIn, session: Session, user: Applicant) -> dict
         raise _http(exc) from exc
     await session.commit()
     return await service.detail(session, app)
+
+
+@router.post("/preview")
+async def preview(body: PreviewIn, session: Session, user: Applicant) -> dict:
+    """Live checks on a draft. Nothing is saved."""
+    try:
+        return await service.preview(session, user, body.model_dump())
+    except service.LoanError as exc:
+        raise _http(exc) from exc
+
+
+@router.get("/applications/{app_id}/replay")
+async def replay(app_id: uuid.UUID, session: Session, user: Oversight) -> dict:
+    try:
+        return await service.replay(session, user, app_id)
+    except service.NotFound as exc:
+        raise _http(exc) from exc
 
 
 @router.get("/applications")
