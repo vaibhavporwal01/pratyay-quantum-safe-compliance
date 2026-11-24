@@ -7,6 +7,20 @@ on:
 jobs:
   api:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: pratyay
+          POSTGRES_PASSWORD: pratyay
+          POSTGRES_DB: pratyay
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pratyay"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: apps/api
@@ -16,6 +30,8 @@ jobs:
       - run: uv sync
       - run: uv run ruff check .
       - run: uv run pytest -q
+        env:
+          DATABASE_URL: postgresql+asyncpg://pratyay:pratyay@localhost:5432/pratyay
 
   web:
     runs-on: ubuntu-latest

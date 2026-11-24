@@ -10,10 +10,17 @@ dependencies = [
   "pydantic-settings>=2.16",
   "pdfplumber>=0.11",
   "cryptography>=47",
+  "scikit-learn>=1.9.1",
+  "joblib>=1.6.0",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "httpx>=0.28", "ruff>=0.12"]
+dev = [
+    "pytest>=8",
+    "httpx>=0.28",
+    "ruff>=0.12",
+    "pytest-asyncio>=1.5.0",
+]
 
 [tool.ruff]
 line-length = 100
@@ -21,3 +28,6 @@ target-version = "py313"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
