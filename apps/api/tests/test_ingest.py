@@ -1,13 +1,14 @@
 """PDF ingest against the docker Postgres, using the real RBI Directions in data/sources."""
 
+import asyncio
 import hashlib
 import re
 from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete, func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.db import get_session
 from app.main import app
@@ -168,3 +169,79 @@ async def test_api_rejects_non_pdf(client: AsyncClient) -> None:
 async def test_api_unknown_source_is_404(client: AsyncClient) -> None:
     r = await client.get("/api/v1/rules/sources/00000000-0000-0000-0000-000000000000/paragraphs")
     assert r.status_code == 404
+
+
+# ---- concurrent uploads of the same file -------------------------------------------------
+
+
+async def test_unique_violation_falls_back_to_existing_doc(
+    session: AsyncSession, monkeypatch
+) -> None:
+    """Simulates losing the race: the pre-insert check misses the row another upload just
+    committed, so the insert hits the unique index and ingest returns the stored document."""
+    first = await ingest_pdf(session, CREDIT, title="Credit")
+
+    real_find = ingest_mod._find_by_hash
+    calls = 0
+
+    async def miss_first_time(s, digest):
+        nonlocal calls
+        calls += 1
+        return None if calls == 1 else await real_find(s, digest)
+
+    monkeypatch.setattr(ingest_mod, "_find_by_hash", miss_first_time)
+    second = await ingest_pdf(session, CREDIT, title="Credit again")
+
+    assert calls == 2  # pre-check missed, fallback lookup found it
+    assert second.doc.id == first.doc.id
+    assert second.report.duplicate
+    # Only the savepoint was rolled back: the outer transaction still works.
+    count = await session.scalar(select(func.count()).select_from(SourceDoc))
+    assert count >= 1
+
+
+async def _wait_for_lock_waiter(engine, timeout: float = 15.0) -> None:
+    """Wait until some backend is blocked on a lock (the second insert on the unique index)."""
+    deadline = asyncio.get_running_loop().time() + timeout
+    async with engine.connect() as c:
+        while asyncio.get_running_loop().time() < deadline:
+            waiting = await c.scalar(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE datname = current_database() AND wait_event_type = 'Lock'"
+                )
+            )
+            if waiting:
+                return
+            await asyncio.sleep(0.05)
+    raise AssertionError("second upload never blocked on the unique index")
+
+
+async def test_two_concurrent_uploads_store_one_doc(migrated_db: str) -> None:
+    """Two real sessions on separate connections upload the same file at the same time."""
+    engine = create_async_engine(migrated_db)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    data = CONDUCT.read_bytes()
+    digest = hashlib.sha3_256(data).digest()
+    try:
+        async with maker() as a, maker() as b:
+            first = await ingest_pdf(a, data, title="Upload A")  # inserted, not committed
+            # B passes its pre-check (A is uncommitted), then blocks on the unique index.
+            racing = asyncio.create_task(ingest_pdf(b, data, title="Upload B"))
+            await _wait_for_lock_waiter(engine)
+            await a.commit()
+            second = await racing
+            await b.commit()
+
+        assert not first.report.duplicate
+        assert second.report.duplicate
+        assert second.doc.id == first.doc.id
+        async with engine.connect() as c:
+            docs = await c.scalar(
+                select(func.count()).select_from(SourceDoc).where(SourceDoc.sha3_256 == digest)
+            )
+        assert docs == 1
+    finally:
+        async with engine.begin() as c:  # these sessions committed, so clean up explicitly
+            await c.execute(delete(SourceDoc).where(SourceDoc.sha3_256 == digest))
+        await engine.dispose()

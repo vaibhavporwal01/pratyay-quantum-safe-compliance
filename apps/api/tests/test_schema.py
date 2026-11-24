@@ -199,3 +199,11 @@ async def test_server_defaults(conn: AsyncConnection) -> None:
         )
     ).scalar_one()
     assert status == "draft"
+
+
+async def test_source_doc_hash_is_unique(conn: AsyncConnection) -> None:
+    sql = text("INSERT INTO rules.source_docs (title, sha3_256) VALUES ('Doc', :h)")
+    await conn.execute(sql, {"h": b"\x01" * 32})
+    await assert_rejected(conn, conn.execute(sql, {"h": b"\x01" * 32}), "ix_source_docs_sha3_256")
+    # Documents without a hash yet do not collide with each other.
+    await conn.execute(text("INSERT INTO rules.source_docs (title) VALUES ('A'), ('B')"))
