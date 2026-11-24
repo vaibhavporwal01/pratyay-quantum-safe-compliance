@@ -16,6 +16,7 @@ from app.rules.classify import (
     classify_paragraphs,
     needs_review,
 )
+from app.rules.engine import Evaluation, RuleResult, build_kfs, evaluate_application
 from app.rules.ingest import (
     MAX_PDF_BYTES,
     FileTooLarge,
@@ -39,6 +40,8 @@ from app.rules.workflow import (
     list_rules,
     reject,
     retire,
+    rule_version,
+    set_stage,
     source_docs_by_id,
     update_draft,
     validate_rule,
@@ -49,6 +52,7 @@ __all__ = [
     "REVIEW_THRESHOLD",
     "SHORT_CODE_PATTERN",
     "ClassifyResult",
+    "Evaluation",
     "FileTooLarge",
     "IngestError",
     "IngestReport",
@@ -57,11 +61,14 @@ __all__ = [
     "MakerIsChecker",
     "ModelNotFound",
     "NotFound",
+    "RuleResult",
     "WorkflowError",
     "approve",
+    "build_kfs",
     "classify_paragraphs",
     "counts",
     "create_draft",
+    "evaluate_application",
     "find_rule",
     "get_paragraph",
     "get_paragraph_by_number",
@@ -76,7 +83,9 @@ __all__ = [
     "paragraph_sort_key",
     "reject",
     "retire",
+    "rule_version",
     "rules_out",
+    "set_stage",
     "source_stats",
     "update_draft",
     "validate_rule",
@@ -177,7 +186,7 @@ async def rules_out(session: AsyncSession, rules: list[Rule]) -> list[dict]:
         out.append(
             {
                 **{c: getattr(r, c) for c in (
-                    "id", "code", "title", "template", "params", "applies_to", "effective_from",
+                    "id", "code", "title", "template", "params", "applies_to", "stage", "effective_from",
                     "effective_to", "status", "source_doc_id", "source_para", "para_text",
                     "section", "related", "origin", "made_by", "checked_by", "review_note", "created_at",
                     "updated_at", "checked_at",

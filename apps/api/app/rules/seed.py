@@ -57,6 +57,8 @@ class RuleSpec:
     related: list[dict[str, str]] = field(default_factory=list)
     # A heading the paragraph sits under; checked against the PDF text before it is stored.
     section: str | None = None
+    # When in the loan's life the rule is checked: origination, servicing or recovery.
+    stage: str = "origination"
 
 
 CF_TITLE = (
@@ -130,6 +132,7 @@ RULES: list[RuleSpec] = [
          "unless": "explicit consent of the borrower", "scope": KFS_SCOPE},
         "all",
         related=[{"para": "29", "note": KFS_SCOPE_NOTE}],
+        stage="servicing",
     ),
     RuleSpec(
         "RBC", "81", "MF-04", "No pre-payment charge on microfinance loans",
@@ -143,6 +146,7 @@ RULES: list[RuleSpec] = [
         {"charge": "delayed payment charge on the entire loan amount",
          "unless": "applied on the overdue amount", "scope": "microfinance loans"},
         "microfinance",
+        stage="servicing",
     ),
     RuleSpec(
         "RBC", "91(2)", "MF-05", "Recovery calls only between 9:00 a.m. and 6:00 p.m.",
@@ -152,6 +156,7 @@ RULES: list[RuleSpec] = [
         related=[{"para": "91", "note": "These practices are deemed harsh methods of "
                                         "recovery."}],
         section="H. Conduct towards Microfinance borrowers",
+        stage="recovery",
     ),
 ]
 
@@ -271,6 +276,9 @@ async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
             section = None
         live = await service.find_rule(session, doc_id, spec.code)
         if live and same_citation(live, spec, section):
+            if live.stage != spec.stage:
+                await service.set_stage(session, checker, live.id, spec.stage)
+                report.corrected.append(f"{spec.code}: stage set to {spec.stage}")
             report.skipped.append(spec.code)
             continue
         if live:
@@ -293,6 +301,7 @@ async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
             "params": params, "applies_to": spec.applies_to,
             "effective_from": issued[spec.doc], "paragraph_id": para.id,
             "related": spec.related, "origin": "manual", "section": section,
+            "stage": spec.stage,
             "supersedes_rule_id": live.id if live else None,
         })
         if missing:
