@@ -42,7 +42,8 @@ class SourceDoc(Base):
     issued_on: Mapped[date | None] = mapped_column(Date)
     url: Mapped[str | None] = mapped_column(Text)
     file: Mapped[bytes | None] = mapped_column(LargeBinary)
-    sha3_256: Mapped[bytes | None] = mapped_column(LargeBinary)
+    # Unique: the same file is stored once (ingest relies on this under concurrent uploads).
+    sha3_256: Mapped[bytes | None] = mapped_column(LargeBinary, index=True, unique=True)
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
