@@ -106,7 +106,7 @@ export function VerifyForm() {
           <FormHead eyebrow="§ 02 · Verify it is you" title="Enter the 6-digit code">
             <p className="type-small text-ink-2">
               From the authenticator app linked to{" "}
-              <span className="break-all">{challenge?.email ?? "your account"}</span>
+              <span className="[overflow-wrap:anywhere]">{challenge?.email ?? "your account"}</span>
             </p>
           </FormHead>
           <CodeInput
