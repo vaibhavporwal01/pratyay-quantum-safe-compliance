@@ -7,6 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
+from app.rules.classify import (
+    REVIEW_THRESHOLD,
+    ClassifyResult,
+    ModelNotFound,
+    classify_paragraphs,
+    needs_review,
+)
 from app.rules.ingest import (
     MAX_PDF_BYTES,
     FileTooLarge,
@@ -19,14 +26,19 @@ from app.rules.models import Paragraph, SourceDoc
 
 __all__ = [
     "MAX_PDF_BYTES",
+    "REVIEW_THRESHOLD",
+    "ClassifyResult",
     "FileTooLarge",
     "IngestError",
     "IngestReport",
     "IngestResult",
+    "ModelNotFound",
+    "classify_paragraphs",
     "get_source_doc",
     "ingest_pdf",
     "list_paragraphs",
     "list_source_docs",
+    "needs_review",
     "paragraph_sort_key",
 ]
 

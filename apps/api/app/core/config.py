@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://pratyay:pratyay@localhost:5432/pratyay"
     app_env: str = "development"
     allowed_origin: str = "http://localhost:3000"
+    # Trained obligation classifier (ml/obligation/train.py). Unset: the repo's ml/ path.
+    obligation_model_path: str | None = None
 
 
 settings = Settings()
