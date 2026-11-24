@@ -80,7 +80,7 @@ KFS_SCOPE = "all new retail and MSME term loans sanctioned on or after October 1
 KFS_SCOPE_NOTE = "Scope of paragraph 29: credit card receivables are exempted."
 
 MF05_END_NOTE = (
-    "Ends 31 Dec 2026: the Reserve Bank of India (Non-Banking Financial Companies - Responsible "
+    "In force through 31 Dec 2026 (effective_to 1 Jan 2027, exclusive): the Reserve Bank of India (Non-Banking Financial Companies - Responsible "
     "Business Conduct) (Third Amendment) Directions, 2026 (RBI/2026-27/230, 6 Aug 2026) delete "
     "paragraph 91 with effect from 1 Jan 2027. That amendment is not in data/sources."
 )
@@ -166,7 +166,8 @@ RULES: list[RuleSpec] = [
                                         "recovery."}],
         section="H. Conduct towards Microfinance borrowers",
         stage="recovery",
-        effective_to=date(2026, 12, 31),
+        # Exclusive: para 91 applies through 31 Dec 2026 and not from 1 Jan 2027.
+        effective_to=date(2027, 1, 1),
         effective_to_note=MF05_END_NOTE,
     ),
 ]

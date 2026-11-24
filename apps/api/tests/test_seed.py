@@ -17,7 +17,7 @@ async def test_seed_is_idempotent_and_values_come_from_text(session) -> None:
     assert all(s.endswith(MODEL_SKIP_NOTE) for s in first.skipped_steps)
     assert set(first.created) == SEEDED
 
-    assert "MF-05: effective_to set to 2026-12-31" in first.corrected
+    assert "MF-05: effective_to set to 2027-01-01" in first.corrected
 
     second = await seed(session)
     assert second.created == [] and set(second.skipped) == SEEDED
@@ -48,7 +48,7 @@ async def test_seed_is_idempotent_and_values_come_from_text(session) -> None:
     assert rules["MF-05"].section == "H. Conduct towards Microfinance borrowers"
     assert rules["MF-01"].section is None
     # MF-05 ends when the Third Amendment deletes para 91 (from 1 Jan 2027).
-    assert str(rules["MF-05"].effective_to) == "2026-12-31"
+    assert str(rules["MF-05"].effective_to) == "2027-01-01"
     assert "RBI/2026-27/230" in rules["MF-05"].review_note
     assert rules["MF-05"].stage == "recovery"
     assert {r.stage for c, r in rules.items() if c in ("MF-06", "KF-02")} == {"servicing"}

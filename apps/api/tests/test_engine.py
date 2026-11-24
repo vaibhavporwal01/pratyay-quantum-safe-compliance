@@ -143,12 +143,15 @@ async def test_prepayment_charge_fails_mf04(session) -> None:
 
 async def test_mf05_in_force_until_the_third_amendment(session) -> None:
     rules = await add_rule_set(session)
-    rules["MF-05"].effective_to = date(2026, 12, 31)  # para 91 deleted from 1 Jan 2027
+    # effective_to is exclusive: para 91 applies through 31 Dec 2026, deleted from 1 Jan 2027.
+    rules["MF-05"].effective_to = date(2027, 1, 1)
     await session.flush()
-    dec = await evaluate_application(session, REKHA, date(2026, 12, 16))
-    assert dec.result("MF-05") is not None
-    assert dec.result("MF-05").status == "not_checked" and dec.result("MF-05").stage == "recovery"
-    assert "MF-05" in {r["code"] for r in dec.rules_used}
-    jan = await evaluate_application(session, REKHA, date(2027, 1, 18))
-    assert jan.result("MF-05") is None
-    assert "MF-05" not in {r["code"] for r in jan.rules_used}
+    for day in (date(2026, 12, 16), date(2026, 12, 31)):
+        ev = await evaluate_application(session, REKHA, day)
+        assert ev.result("MF-05") is not None, day
+        assert ev.result("MF-05").status == "not_checked" and ev.result("MF-05").stage == "recovery"
+        assert "MF-05" in {r["code"] for r in ev.rules_used}
+    for day in (date(2027, 1, 1), date(2027, 1, 18)):
+        ev = await evaluate_application(session, REKHA, day)
+        assert ev.result("MF-05") is None, day
+        assert "MF-05" not in {r["code"] for r in ev.rules_used}
