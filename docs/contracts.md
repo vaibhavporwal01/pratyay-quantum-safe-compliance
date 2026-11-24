@@ -36,6 +36,12 @@ sessions, passwords are his). `app/identity/service.py` holds `get_user`, `user_
 Replace `get_current_user` and remove the cookie middleware in `app/main.py` when the real
 identity module lands; callers do not change.
 
+**Showcase flag, temporary (Vishnukant: remove when login lands).** `ALLOW_ROLE_SWITCHER=true`
+(API) and `NEXT_PUBLIC_ALLOW_ROLE_SWITCHER=true` (web) make the "Act as" switcher and the
+cookie stand-in work outside development, so the deployed site can be shown before sign-in
+exists. Both default to false. Remove both flags, `stand_in_enabled()` in
+`app/identity/deps.py` and the check in `components/app/DevRoleSwitcher.tsx` with the stand-in.
+
 ## Rule engine (owner: Vaibhav)
 
 `evaluate_application(session, facts, on_date) -> Evaluation(on_date, outcome, microfinance,

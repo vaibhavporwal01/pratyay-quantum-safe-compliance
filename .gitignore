@@ -45,3 +45,6 @@ pgdata/
 
 # Local dev logs and pids
 .dev/
+
+# Local deploy notes (never committed)
+deploy.local.md
