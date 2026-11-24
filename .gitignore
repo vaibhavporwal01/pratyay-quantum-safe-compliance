@@ -41,3 +41,6 @@ mlruns/
 
 # Local data
 pgdata/
+
+# Local dev logs and pids
+.dev/
