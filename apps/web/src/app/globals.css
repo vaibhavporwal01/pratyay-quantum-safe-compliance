@@ -48,9 +48,6 @@
   --font-serif: var(--font-newsreader), Georgia, serif;
   --font-sans: var(--font-plex-sans), system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
-
-  /* Receipt drop shadow from Figma: ink at low alpha, not a new colour. */
-  --shadow-receipt: 0 10px 12px rgb(26 24 20 / 0.08), 0 1px 1px rgb(26 24 20 / 0.1);
 }
 
 /* Text styles. Figma letter spacing is a percentage of size, so em here. */
@@ -173,6 +170,14 @@
   line-height: 16px;
   font-weight: 500;
   letter-spacing: 0;
+}
+
+/*
+ * Receipt drop shadow from Figma: ink at low alpha, not a new colour.
+ * A filter, not box-shadow, so it follows the perforated edges.
+ */
+@utility receipt-shadow {
+  filter: drop-shadow(0 10px 12px rgb(26 24 20 / 0.08)) drop-shadow(0 1px 1px rgb(26 24 20 / 0.1));
 }
 
 /* Dotted leader used by ledger rows and receipt lines. */
