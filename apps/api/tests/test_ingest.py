@@ -252,3 +252,10 @@ async def test_two_concurrent_uploads_store_one_doc(migrated_db: str) -> None:
         async with engine.begin() as c:  # these sessions committed, so clean up explicitly
             await c.execute(delete(SourceDoc).where(SourceDoc.sha3_256 == digest))
         await engine.dispose()
+
+
+async def test_short_code_is_stored_and_unique(session: AsyncSession) -> None:
+    first = await ingest_pdf(session, CREDIT, title="Credit", short_code="CF")
+    assert first.doc.short_code == "CF"
+    with pytest.raises(IngestError, match="already used"):
+        await ingest_pdf(session, CONDUCT, title="Conduct", short_code="CF")

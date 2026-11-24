@@ -24,7 +24,7 @@ from app.rules.ingest import (
     IngestResult,
     ingest_pdf,
 )
-from app.rules.models import Paragraph, Rule, SourceDoc
+from app.rules.models import SHORT_CODE_PATTERN, Paragraph, Rule, SourceDoc
 from app.rules.workflow import (
     InvalidRule,
     MakerIsChecker,
@@ -47,6 +47,7 @@ from app.rules.workflow import (
 __all__ = [
     "MAX_PDF_BYTES",
     "REVIEW_THRESHOLD",
+    "SHORT_CODE_PATTERN",
     "ClassifyResult",
     "FileTooLarge",
     "IngestError",
@@ -143,6 +144,7 @@ async def source_stats(session: AsyncSession, docs: list[SourceDoc]) -> list[dic
         {
             "id": d.id,
             "title": d.title,
+            "short_code": d.short_code,
             "ref_no": d.ref_no,
             "issued_on": d.issued_on,
             "url": d.url,
@@ -177,10 +179,11 @@ async def rules_out(session: AsyncSession, rules: list[Rule]) -> list[dict]:
                 **{c: getattr(r, c) for c in (
                     "id", "code", "title", "template", "params", "applies_to", "effective_from",
                     "effective_to", "status", "source_doc_id", "source_para", "para_text",
-                    "related", "origin", "made_by", "checked_by", "review_note", "created_at",
+                    "section", "related", "origin", "made_by", "checked_by", "review_note", "created_at",
                     "updated_at", "checked_at",
                 )},
                 "source_doc_title": doc.title if doc else "",
+                "source_doc_code": doc.short_code if doc else None,
                 "source_doc_ref": doc.ref_no if doc else None,
                 "made_by_name": names.get(r.made_by),
                 "checked_by_name": names.get(r.checked_by) if r.checked_by else None,

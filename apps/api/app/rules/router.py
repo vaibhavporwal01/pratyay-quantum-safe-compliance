@@ -34,6 +34,7 @@ from app.rules.schemas import (
     SourceIngestOut,
     SuggestionOut,
 )
+from app.rules.service import SHORT_CODE_PATTERN
 
 router = APIRouter(prefix="/rules", tags=["rules"])
 
@@ -76,6 +77,9 @@ async def upload_source(
     response: Response,
     file: Annotated[UploadFile, File(description="RBI Directions PDF, at most 20 MB")],
     title: Annotated[str, Form(min_length=1)],
+    short_code: Annotated[
+        str | None, Form(pattern=SHORT_CODE_PATTERN, description='Citation code, e.g. "CF"')
+    ] = None,
     ref_no: Annotated[str | None, Form()] = None,
     issued_on: Annotated[date | None, Form()] = None,
     url: Annotated[str | None, Form()] = None,
@@ -84,7 +88,7 @@ async def upload_source(
     data = await file.read(service.MAX_PDF_BYTES + 1)
     try:
         result = await service.ingest_pdf(
-            session, data, title=title, ref_no=ref_no, issued_on=issued_on, url=url,
+            session, data, title=title, short_code=short_code, ref_no=ref_no, issued_on=issued_on, url=url,
             uploaded_by=user.id,
         )
     except service.FileTooLarge as exc:

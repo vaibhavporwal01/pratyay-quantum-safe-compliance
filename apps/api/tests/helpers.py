@@ -16,7 +16,7 @@ def user(role: str, name: str | None = None) -> User:
 
 async def add_paragraphs(session: AsyncSession, paras: dict[str, str]) -> dict[str, Paragraph]:
     """A source document holding the given paragraphs (number -> text)."""
-    doc = SourceDoc(title="Test Directions", ref_no="RBI/TEST/1")
+    doc = SourceDoc(title="Test Directions", short_code="CF", ref_no="RBI/TEST/1")
     session.add(doc)
     await session.flush()
     rows = {n: Paragraph(doc_id=doc.id, number=n, page=1, text=t) for n, t in paras.items()}

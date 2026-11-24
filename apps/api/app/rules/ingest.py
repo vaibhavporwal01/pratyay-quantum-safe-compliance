@@ -111,6 +111,7 @@ async def ingest_pdf(
     source: str | Path | bytes,
     title: str,
     ref_no: str | None = None,
+    short_code: str | None = None,
     issued_on: date | None = None,
     url: str | None = None,
     uploaded_by: uuid.UUID | None = None,
@@ -124,9 +125,14 @@ async def ingest_pdf(
     existing = await _find_by_hash(session, digest)
     if existing is not None:
         return await _duplicate(session, existing, digest, parsed)
+    if short_code and await session.scalar(
+        select(SourceDoc.id).where(SourceDoc.short_code == short_code)
+    ):
+        raise IngestError(f"Short code {short_code} is already used by another source.")
 
     doc = SourceDoc(
         title=title,
+        short_code=short_code,
         ref_no=ref_no,
         issued_on=issued_on,
         url=url,

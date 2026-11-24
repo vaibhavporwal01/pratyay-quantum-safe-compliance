@@ -117,7 +117,7 @@ async def get_rule(session: AsyncSession, rule_id: uuid.UUID) -> Rule:
 
 async def create_draft(session: AsyncSession, user: User, data: dict[str, Any]) -> Rule:
     """data: code, title, template, params, applies_to, effective_from, paragraph_id,
-    related [{para, note}], origin."""
+    related [{para, note}], origin, and optionally section and supersedes_rule_id."""
     para = await _paragraph(session, data["paragraph_id"])
     related = await _related_from_ids(session, para.doc_id, data.get("related") or [])
     if data["applies_to"] not in APPLIES_TO:
@@ -135,7 +135,9 @@ async def create_draft(session: AsyncSession, user: User, data: dict[str, Any]) 
         source_doc_id=para.doc_id,
         source_para=para.number or "",
         para_text=para.text,
+        section=data.get("section") or None,
         related=related,
+        supersedes_rule_id=data.get("supersedes_rule_id"),
         origin=data.get("origin", "manual"),
         made_by=user.id,
     )
@@ -168,6 +170,8 @@ async def update_draft(
             setattr(rule, key, data[key])
     if "effective_from" in data:
         rule.effective_from = data["effective_from"]
+    if "section" in data:
+        rule.section = data["section"] or None
     rule.template, rule.params, rule.applies_to, rule.related = (
         template, params, applies_to, related,
     )

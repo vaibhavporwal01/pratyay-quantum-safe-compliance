@@ -26,6 +26,7 @@ from app.core.db import Base
 
 SCHEMA = "rules"
 _UUID_DEFAULT = text("gen_random_uuid()")
+SHORT_CODE_PATTERN = "^[A-Z][A-Z0-9-]{0,11}$"
 
 
 def _pk() -> Mapped[uuid.UUID]:
@@ -34,10 +35,17 @@ def _pk() -> Mapped[uuid.UUID]:
 
 class SourceDoc(Base):
     __tablename__ = "source_docs"
-    __table_args__ = ({"schema": SCHEMA},)
+    __table_args__ = (
+        CheckConstraint(
+            f"short_code IS NULL OR short_code ~ '{SHORT_CODE_PATTERN}'", name="short_code"
+        ),
+        {"schema": SCHEMA},
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     title: Mapped[str] = mapped_column(Text)
+    # Citation code shown in anchors, e.g. "CF" for "CF para 51". Set explicitly, never derived.
+    short_code: Mapped[str | None] = mapped_column(Text, unique=True)
     ref_no: Mapped[str | None] = mapped_column(Text)
     issued_on: Mapped[date | None] = mapped_column(Date)
     url: Mapped[str | None] = mapped_column(Text)
@@ -138,6 +146,8 @@ class Rule(Base):
     source_doc_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(f"{SCHEMA}.source_docs.id"))
     source_para: Mapped[str] = mapped_column(Text)
     para_text: Mapped[str] = mapped_column(Text)
+    # The heading the paragraph sits under, for context. Shown as a heading, never as a quote.
+    section: Mapped[str | None] = mapped_column(Text)
     # Other paragraphs that qualify this rule: [{"para", "text", "note"}].
     related: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, server_default=text("'[]'::jsonb")

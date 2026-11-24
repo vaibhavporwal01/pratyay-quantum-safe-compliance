@@ -125,3 +125,13 @@ async def test_overview_lists_drafts_for_other_checkers(api, paras) -> None:
 async def test_unknown_rule_is_404(api) -> None:
     r = await api.get("/api/v1/rules/00000000-0000-0000-0000-000000000000")
     assert r.status_code == 404
+
+
+async def test_rule_carries_source_code_and_section(api, paras) -> None:
+    r = await create(api, paras, section="H. Conduct towards Microfinance borrowers")
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["source_doc_code"] == "CF"
+    assert body["section"] == "H. Conduct towards Microfinance borrowers"
+    sources = (await api.get("/api/v1/rules/sources")).json()
+    assert [d["short_code"] for d in sources] == ["CF"]

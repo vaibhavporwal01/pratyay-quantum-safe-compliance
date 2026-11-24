@@ -46,6 +46,7 @@ class ParagraphOut(BaseModel):
 class SourceDocOut(BaseModel):
     id: uuid.UUID
     title: str
+    short_code: str | None
     ref_no: str | None
     issued_on: date | None
     url: str | None
@@ -124,6 +125,7 @@ class RuleCreate(BaseModel):
     applies_to: str = "all"
     effective_from: date | None = None
     paragraph_id: uuid.UUID
+    section: str | None = Field(default=None, max_length=200)
     related: list[RelatedIn] = []
     origin: str = Field(default="manual", pattern="^(auto|manual)$")
 
@@ -135,6 +137,7 @@ class RuleUpdate(BaseModel):
     params: dict[str, Any] | None = None
     applies_to: str | None = None
     effective_from: date | None = None
+    section: str | None = Field(default=None, max_length=200)
     related: list[RelatedIn] | None = None
 
 
@@ -154,9 +157,11 @@ class RuleOut(BaseModel):
     status: str
     source_doc_id: uuid.UUID
     source_doc_title: str
+    source_doc_code: str | None
     source_doc_ref: str | None
     source_para: str
     para_text: str
+    section: str | None
     related: list[RelatedOut]
     origin: str
     made_by: uuid.UUID
