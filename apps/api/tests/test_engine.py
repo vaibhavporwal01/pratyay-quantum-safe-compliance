@@ -32,6 +32,9 @@ async def test_worked_example_app_2026_0142(session) -> None:
     assert offer["ratio_percent"] == "49.95"
     assert offer["e_max_paise"] == 3_500_00
     assert offer["outcome"] == "pass"
+    again = await evaluate_application(session, {**REKHA, "amount_paise": 66_000_00}, ON)
+    assert again.result("MF-02").values["ratio_percent"] == "49.95"
+    assert again.result("MF-02").values["repayments"] == "₹10,989"
 
     kfs = ev.kfs
     assert kfs["emi_paise"] == 4_230_00

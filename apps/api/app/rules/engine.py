@@ -179,6 +179,16 @@ def _mf01(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
                   f"{fin.rupees(limit)}."), values
 
 
+def _ratio_text(num: Fraction | int, den: Fraction, limit: Fraction) -> str:
+    """One decimal, or two when one would hide which side of the limit it is (49.95 not 50.0)."""
+    one = fin.percent(num, den, 1)
+    within = Fraction(num) / den <= limit
+    shown = Fraction(one) / 100
+    if within != (shown <= limit) or shown == limit:
+        return fin.percent(num, den, 2)
+    return one
+
+
 def _mf02(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
     income, existing, amount, months, rate = _need(
         facts, "household_income_annual_paise", "existing_monthly_repayments_paise",
@@ -194,7 +204,7 @@ def _mf02(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
         "existing_repayments": fin.rupees(existing),
         "new_emi": fin.rupees(emi),
         "repayments": fin.rupees(total),
-        "ratio_percent": fin.percent(total, monthly),
+        "ratio_percent": _ratio_text(total, monthly, ratio),
         "limit_percent": str(rule.params["max_percent"]),
         "e_max": fin.rupees(e_max) if e_max > 0 else "₹0",
         "formula": "(existing monthly repayments + new EMI) / monthly household income",
