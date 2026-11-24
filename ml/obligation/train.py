@@ -5,18 +5,26 @@ Usage (from the repo root):
     uv run --project apps/api python ml/obligation/train.py
     uv run --project apps/api python ml/obligation/train.py --seed 42 --no-save
 
-Reads the `label` column (suggested_label is only used as the keyword baseline).
-Features and pipeline live in apps/api/app/rules/obligation_features.py:
-TF-IDF word 1-2 grams + TF-IDF char 3-5 grams + hand features, logistic regression
+Reads the `label` column. Features and pipelines live in
+apps/api/app/rules/obligation_features.py:
+  - TF-IDF word 1-2 grams and char 3-5 grams on the paragraph
+  - TF-IDF word 1-2 grams on the parent paragraph's first 200 characters (sub-paragraphs)
+  - hand features: shall / shall not / must / not exceed / may / means, heading-like,
+    length, short fragment, ends with ":", has a parent
+  - the keyword heuristic's label, one-hot
+Candidates: logistic regression and LinearSVC (sigmoid-calibrated for confidences), both
 with balanced class weights.
 
-Protocol: stratified 80/20 split with a fixed seed, 5-fold stratified cross-validation
-(macro F1) on the 80%, then fit on the 80% and score the held-out 20%. The keyword
-baseline is scored on the same 20%.
+Protocol:
+  1. Stratified 80/20 split with a fixed seed (the same split as model 1.0.0).
+  2. 5-fold stratified CV (macro F1) of each candidate on the 80% only.
+     The candidate with the higher CV mean is chosen. The 20% plays no part in the choice.
+  3. Each candidate is fitted on the 80% and scored on the 20%, next to the keyword
+     baseline on the same 20%, for reporting.
 
 Writes:
-    ml/obligation/results.json             metrics for the model and the baseline
-    ml/obligation/models/obligation.joblib {"pipeline", "labels", "version", ...} (gitignored)
+    ml/obligation/results.json             selection, CV and held-out metrics
+    ml/obligation/models/obligation.joblib the chosen model (gitignored)
 """
 
 import argparse
@@ -24,6 +32,7 @@ import csv
 import hashlib
 import json
 import sys
+from itertools import groupby
 from pathlib import Path
 
 import joblib
@@ -34,28 +43,42 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent / "apps" / "api"))
 
-from app.rules.obligation_features import LABELS, build_pipeline
+from app.rules.obligation_features import (
+    FEATURES_VERSION,
+    LABELS,
+    MODEL_NAMES,
+    build_pipeline,
+    make_records,
+)
 
 SEED = 42
-MODEL_VERSION = "1.0.0"
+MODEL_VERSION = "2.0.0"
 LABELS_CSV = HERE / "labels.csv"
 RESULTS_JSON = HERE / "results.json"
 MODEL_PATH = HERE / "models" / "obligation.joblib"
+BASELINE = "keyword_baseline"
 
 
-def load_labelled(path: Path) -> tuple[list[str], list[str], list[str], str]:
-    """Rows with a valid label. Returns texts, labels, suggested labels, sha256 of the file."""
+def load_labelled(path: Path) -> tuple[list[dict], list[str], list[str], str]:
+    """Records (with document context) for rows with a valid label.
+
+    Context is built from every row of the document, labelled or not, so parents are found.
+    Returns records, labels, the CSV's suggested_label column, and sha256 of the file.
+    """
     raw = path.read_bytes()
-    texts, labels, suggested = [], [], []
     with path.open(newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
+        rows = list(csv.DictReader(f))
+    records, labels, suggested = [], [], []
+    for _, doc_rows in groupby(rows, key=lambda r: r["doc_ref"]):
+        doc_rows = list(doc_rows)
+        doc_records = make_records([(r["number"] or None, r["text"]) for r in doc_rows])
+        for row, rec in zip(doc_rows, doc_records, strict=True):
             label = row["label"].strip().lower()
-            if label not in LABELS:
-                continue
-            texts.append(row["text"])
-            labels.append(label)
-            suggested.append(row["suggested_label"].strip().lower())
-    return texts, labels, suggested, hashlib.sha256(raw).hexdigest()
+            if label in LABELS:
+                records.append(rec)
+                labels.append(label)
+                suggested.append(row["suggested_label"].strip().lower())
+    return records, labels, suggested, hashlib.sha256(raw).hexdigest()
 
 
 def metrics(y_true: list[str], y_pred: list[str]) -> dict:
@@ -82,47 +105,75 @@ def metrics(y_true: list[str], y_pred: list[str]) -> dict:
 
 
 def train(labels_csv: Path = LABELS_CSV, seed: int = SEED) -> tuple[dict, object]:
-    texts, y, suggested, sha = load_labelled(labels_csv)
-    idx = np.arange(len(texts))
+    records, y, suggested_csv, sha = load_labelled(labels_csv)
+    suggested = [r["suggested"] for r in records]
+    if suggested != suggested_csv:
+        raise SystemExit("labels.csv suggested_label no longer matches the keyword heuristic")
+
+    idx = np.arange(len(records))
     tr, te = train_test_split(idx, test_size=0.2, stratify=y, random_state=seed)
-    x_tr = [texts[i] for i in tr]
+    x_tr = [records[i] for i in tr]
     y_tr = [y[i] for i in tr]
-    x_te = [texts[i] for i in te]
+    x_te = [records[i] for i in te]
     y_te = [y[i] for i in te]
 
+    # 1. Model selection: CV on the training 80% only.
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
-    cv_scores = cross_val_score(build_pipeline(seed), x_tr, y_tr, cv=cv, scoring="f1_macro")
+    cv_results = {}
+    for name in MODEL_NAMES:
+        scores = cross_val_score(build_pipeline(seed, name), x_tr, y_tr, cv=cv, scoring="f1_macro")
+        cv_results[name] = {
+            "scores": [round(float(s), 4) for s in scores],
+            "mean": round(float(scores.mean()), 4),
+            "std": round(float(scores.std()), 4),
+        }
+    chosen = max(MODEL_NAMES, key=lambda n: (cv_results[n]["mean"], -cv_results[n]["std"]))
 
-    pipeline = build_pipeline(seed).fit(x_tr, y_tr)
-    y_pred = pipeline.predict(x_te).tolist()
+    # 2. Reporting: every candidate and the baseline on the same held-out 20%.
+    fitted = {name: build_pipeline(seed, name).fit(x_tr, y_tr) for name in MODEL_NAMES}
+    held_out = {name: metrics(y_te, fitted[name].predict(x_te).tolist()) for name in MODEL_NAMES}
+    held_out[BASELINE] = metrics(y_te, [suggested[i] for i in te])
 
     results = {
+        "status": "draft: labels are unreviewed AI drafts",
         "model_version": f"{MODEL_VERSION}+labels.{sha[:8]}",
+        "features_version": FEATURES_VERSION,
         "seed": seed,
         "labels_csv_sha256": sha,
-        "n_labelled": len(texts),
+        "n_labelled": len(records),
         "n_train": len(tr),
         "n_test": len(te),
         "class_counts": {lab: y.count(lab) for lab in LABELS},
-        "cv_on_train": {
-            "folds": 5,
-            "scoring": "f1_macro",
-            "scores": [round(float(s), 4) for s in cv_scores],
-            "mean": round(float(cv_scores.mean()), 4),
-            "std": round(float(cv_scores.std()), 4),
+        "selection": {
+            "criterion": "highest mean macro F1, 5-fold stratified CV on the training 80%",
+            "cv_on_train": cv_results,
+            "chosen": chosen,
         },
-        "model_test": metrics(y_te, y_pred),
-        "baseline_test": metrics(y_te, [suggested[i] for i in te]),
+        "held_out_test": held_out,
+        "per_class_f1_held_out": {
+            lab: {name: held_out[name]["per_class"][lab]["f1"] for name in held_out}
+            for lab in LABELS
+        },
+        "macro_f1_held_out": {name: held_out[name]["macro_f1"] for name in held_out},
+        "chosen_macro_f1_gain_over_baseline": round(
+            held_out[chosen]["macro_f1"] - held_out[BASELINE]["macro_f1"], 4
+        ),
     }
-    results["macro_f1_gain_over_baseline"] = round(
-        results["model_test"]["macro_f1"] - results["baseline_test"]["macro_f1"], 4
-    )
-    return results, pipeline
+    return results, fitted[chosen]
 
 
-def save_model(pipeline, version: str, path: Path = MODEL_PATH) -> None:
+def save_model(pipeline, version: str, path: Path = MODEL_PATH, model: str = "") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump({"pipeline": pipeline, "labels": list(LABELS), "version": version}, path)
+    joblib.dump(
+        {
+            "pipeline": pipeline,
+            "labels": list(LABELS),
+            "version": version,
+            "features_version": FEATURES_VERSION,
+            "model": model,
+        },
+        path,
+    )
 
 
 def main() -> None:
@@ -136,8 +187,9 @@ def main() -> None:
     print(json.dumps(results, indent=2))
     if not args.no_save:
         RESULTS_JSON.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
-        save_model(pipeline, results["model_version"])
-        print(f"Saved {RESULTS_JSON} and {MODEL_PATH}")
+        chosen = results["selection"]["chosen"]
+        save_model(pipeline, results["model_version"], model=chosen)
+        print(f"Saved {RESULTS_JSON} and {MODEL_PATH} ({chosen})")
 
 
 if __name__ == "__main__":
