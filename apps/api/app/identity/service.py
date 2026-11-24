@@ -36,6 +36,13 @@ async def first_user_with_role(session: AsyncSession, role: str) -> User | None:
     )
 
 
+async def list_users(session: AsyncSession, org_id: uuid.UUID) -> list[User]:
+    rows = await session.scalars(
+        select(User).where(User.org_id == org_id).order_by(User.role, User.name)
+    )
+    return list(rows)
+
+
 async def user_names(session: AsyncSession, ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
     ids = {i for i in ids if i is not None}
     if not ids:

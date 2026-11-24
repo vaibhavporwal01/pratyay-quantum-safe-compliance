@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.core.db import Base
 
 target_metadata = Base.metadata
-SCHEMAS = ("rules", "origination", "decision", "identity")
+SCHEMAS = ("rules", "origination", "decision", "identity", "loans")
 # Tests override the URL via the Alembic config; otherwise read it from env settings.
 DATABASE_URL = context.config.get_main_option("sqlalchemy.url") or settings.database_url
 

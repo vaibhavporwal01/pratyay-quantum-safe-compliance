@@ -4,7 +4,7 @@ minimum the dev role stand-in needs, and he will extend it."""
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Text, func, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,6 +28,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(Text, unique=True)
     name: Mapped[str] = mapped_column(Text)
     role: Mapped[str] = mapped_column(Text)
+    # Added in 0005 for the admin Users page. Vishnukant's sign-in will set it.
+    active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
