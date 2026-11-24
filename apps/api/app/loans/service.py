@@ -52,13 +52,24 @@ def today() -> date:
     return datetime.now(LENDER_TZ).date()
 
 
+def day_of(at: datetime | None) -> date:
+    """The lender's calendar date of a step: its own date when it has a fixed time."""
+    return at.astimezone(LENDER_TZ).date() if at else today()
+
+
+def _stamp(column: str, at: datetime | None) -> dict[str, datetime]:
+    """A fixed time for a timestamp column, or nothing (the database clock fills it)."""
+    return {column: at} if at else {}
+
+
 # ---- helpers -----------------------------------------------------------------------------
 
 
 async def _log(session: AsyncSession, actor_id: uuid.UUID, app: Application, action: str,
-               meta: dict[str, Any] | None = None) -> None:
+               meta: dict[str, Any] | None = None, at: datetime | None = None) -> None:
     meta = meta or {}
-    session.add(Event(application_id=app.id, actor_id=actor_id, action=action, meta=meta))
+    session.add(Event(application_id=app.id, actor_id=actor_id, action=action, meta=meta,
+                      **_stamp("created_at", at)))
     await session.flush()
     await audit.log_event(session, actor_id, f"loan.{action}", f"application:{app.ref}", meta)
 
@@ -80,22 +91,23 @@ def facts_for(app: Application, amount_paise: int | None = None) -> dict[str, An
 
 
 async def _evaluate(session: AsyncSession, app: Application, actor: User,
-                    amount_paise: int | None = None, on_date: date | None = None) -> Evaluation:
+                    amount_paise: int | None = None, on_date: date | None = None,
+                    at: datetime | None = None) -> Evaluation:
     facts = facts_for(app, amount_paise)
-    result = await rules.evaluate_application(session, facts, on_date or today())
+    result = await rules.evaluate_application(session, facts, on_date or day_of(at))
     row = Evaluation(
         application_id=app.id, on_date=date.fromisoformat(result.on_date),
         amount_paise=facts["amount_paise"], outcome=result.outcome,
         microfinance=result.microfinance, results=result.as_dict()["results"],
         rules_used=result.rules_used, offer=result.offer, kfs=result.kfs, facts=facts,
-        run_by=actor.id,
+        run_by=actor.id, **_stamp("created_at", at),
     )
     session.add(row)
     await session.flush()
     await _log(session, actor.id, app, "evaluated", {
         "evaluation_id": str(row.id), "amount_paise": row.amount_paise, "outcome": row.outcome,
         "rules": [f"{r['code']} v{r['version']}" for r in row.rules_used],
-    })
+    }, at)
     return row
 
 
@@ -130,7 +142,7 @@ async def latest_evaluation(session: AsyncSession, app: Application) -> Evaluati
     return await session.scalar(
         select(Evaluation)
         .where(Evaluation.application_id == app.id, Evaluation.amount_paise == app.amount_paise)
-        .order_by(Evaluation.created_at.desc(), Evaluation.id).limit(1)
+        .order_by(Evaluation.seq.desc()).limit(1)
     )
 
 
@@ -193,7 +205,7 @@ async def detail(session: AsyncSession, app: Application) -> dict[str, Any]:
     ev = await latest_evaluation(session, app)
     dec = await get_decision(session, app.id)
     events = list(await session.scalars(
-        select(Event).where(Event.application_id == app.id).order_by(Event.created_at, Event.id)
+        select(Event).where(Event.application_id == app.id).order_by(Event.seq)
     ))
     ids = {e.actor_id for e in events} | {app.submitted_by}
     if dec:
@@ -205,7 +217,7 @@ async def detail(session: AsyncSession, app: Application) -> dict[str, Any]:
         at_recommended = await session.scalar(
             select(Evaluation).where(Evaluation.application_id == app.id,
                                      Evaluation.amount_paise == dec.recommended_paise)
-            .order_by(Evaluation.created_at.desc()).limit(1)
+            .order_by(Evaluation.seq.desc()).limit(1)
         )
     return {
         "application": _app_dict(app) | {"submitted_by_name": names.get(app.submitted_by)},
@@ -239,7 +251,8 @@ def _decision_dict(dec: Decision, names: dict[uuid.UUID, str]) -> dict[str, Any]
 
 
 async def create_application(
-    session: AsyncSession, user: User, data: dict[str, Any], on_date: date | None = None
+    session: AsyncSession, user: User, data: dict[str, Any], on_date: date | None = None,
+    at: datetime | None = None,
 ) -> Application:
     """data: product, amount_paise, tenor_months, purpose, household_income_annual_paise,
     existing_monthly_repayments_paise, and for an officer borrower_name. Rate, fees and the
@@ -255,7 +268,7 @@ async def create_application(
         borrower_id, borrower_name = data.get("borrower_id"), (data.get("borrower_name") or "").strip()
         if not borrower_name:
             raise Invalid("The borrower's name is needed.")
-    when = on_date or today()
+    when = on_date or day_of(at)
     app = Application(
         org_id=user.org_id,
         ref=data.get("ref") or await next_ref(session, when.year),
@@ -273,13 +286,15 @@ async def create_application(
         existing_monthly_repayments_paise=data.get("existing_monthly_repayments_paise"),
         status="evaluated",
         submitted_by=user.id,
+        **_stamp("created_at", at),
+        **_stamp("updated_at", at),
     )
     session.add(app)
     await session.flush()
     await _log(session, user.id, app, "submitted", {
         "by_role": user.role, "amount_paise": app.amount_paise, "tenor_months": app.tenor_months,
-    })
-    await _evaluate(session, app, user, on_date=when)
+    }, at)
+    await _evaluate(session, app, user, on_date=when, at=at)
     return app
 
 
@@ -317,8 +332,8 @@ def _note(note: str | None) -> str | None:
 
 
 async def _must_pass(session: AsyncSession, app: Application, user: User, amount: int,
-                     on_date: date | None) -> Evaluation:
-    ev = await _evaluate(session, app, user, amount, on_date)
+                     on_date: date | None, at: datetime | None = None) -> Evaluation:
+    ev = await _evaluate(session, app, user, amount, on_date, at)
     if ev.outcome != "pass":
         bad = [f"{r['code']} {r['status']}" for r in ev.results if r["status"] in ("fail", "refer")]
         raise LoanError(f"Not every rule passes at this amount ({', '.join(bad)}).")
@@ -328,6 +343,7 @@ async def _must_pass(session: AsyncSession, app: Application, user: User, amount
 async def recommend(
     session: AsyncSession, user: User, app_id: uuid.UUID, recommendation: str,
     amount_paise: int | None, note: str | None, on_date: date | None = None,
+    at: datetime | None = None,
 ) -> Application:
     app = await get_application(session, user, app_id)
     if app.status != "evaluated":
@@ -335,12 +351,12 @@ async def recommend(
     note = _note(note)
     if recommendation == "approve":
         amount = app.amount_paise
-        await _must_pass(session, app, user, amount, on_date)
+        await _must_pass(session, app, user, amount, on_date, at)
     elif recommendation == "approve_modified":
         if not amount_paise or amount_paise >= app.amount_paise:
             raise Invalid("A modified amount must be below the amount asked for.")
         amount = amount_paise
-        await _must_pass(session, app, user, amount, on_date)
+        await _must_pass(session, app, user, amount, on_date, at)
     elif recommendation == "reject":
         if not note:
             raise Invalid("A note is needed to recommend a rejection.")
@@ -349,13 +365,15 @@ async def recommend(
         raise Invalid("recommendation must be approve, approve_modified or reject")
     session.add(Decision(
         application_id=app.id, recommendation=recommendation, recommended_paise=amount,
-        officer_id=user.id, officer_note=note,
+        officer_id=user.id, officer_note=note, **_stamp("recommended_at", at),
     ))
     app.status = "recommended"
+    if at:
+        app.updated_at = at
     await session.flush()
     await _log(session, user.id, app, "recommended", {
         "recommendation": recommendation, "amount_paise": amount, "note": note,
-    })
+    }, at)
     return app
 
 
@@ -374,6 +392,7 @@ async def _sign_decision(session: AsyncSession, decision: Decision, payload: dic
 async def decide(
     session: AsyncSession, user: User, app_id: uuid.UUID, outcome: str,
     amount_paise: int | None, note: str | None, on_date: date | None = None,
+    at: datetime | None = None,
 ) -> Application:
     """outcome: approve (at the recommended amount), modify (at amount_paise) or reject."""
     app = await get_application(session, user, app_id)
@@ -402,7 +421,7 @@ async def decide(
     else:
         raise Invalid("outcome must be approve, modify or reject")
     if amount is not None:
-        final_ev = await _must_pass(session, app, user, amount, on_date)
+        final_ev = await _must_pass(session, app, user, amount, on_date, at)
     app.status = (
         "rejected" if amount is None
         else "approved" if amount == app.amount_paise else "approved_modified"
@@ -411,7 +430,9 @@ async def decide(
     dec.approved_paise = amount
     dec.checker_id = user.id
     dec.checker_note = note
-    dec.decided_at = datetime.now(UTC)
+    dec.decided_at = at or datetime.now(UTC)
+    if at:
+        app.updated_at = at
     dec.evaluation_id = final_ev.id if final_ev else None
     await session.flush()
     dec.ledger_seq = await _sign_decision(session, dec, {
@@ -424,7 +445,7 @@ async def decide(
     await _log(session, user.id, app, "decided", {
         "outcome": app.status, "amount_paise": amount, "note": note,
         "signature": "pending" if dec.ledger_seq is None else "signed",
-    })
+    }, at)
     return app
 
 
@@ -505,22 +526,37 @@ async def overview(session: AsyncSession, user: User) -> dict[str, Any]:
 
 
 async def decisions_log(session: AsyncSession, user: User) -> list[dict[str, Any]]:
-    """Every decision with its final evaluation, newest first, for the checker and auditor."""
+    """Decided applications only (a checker has decided), newest first, for the ledger and
+    Verify. Each row says how many rules were checked, their versions, and which rule decided
+    the outcome (the rules that failed or referred at the amount asked for)."""
     rows = (await session.execute(
         select(Decision, Application).join(Application, Application.id == Decision.application_id)
-        .where(Application.org_id == user.org_id)
-        .order_by(Decision.decided_at.desc().nulls_first(), Decision.recommended_at.desc())
+        .where(Application.org_id == user.org_id, Decision.outcome.is_not(None))
+        .order_by(Decision.decided_at.desc(), Application.ref)
     )).all()
     names = await identity.user_names(
         session, {d.officer_id for d, _ in rows} | {d.checker_id for d, _ in rows if d.checker_id}
     )
     out = []
     for dec, app in rows:
-        ev = await session.get(Evaluation, dec.evaluation_id) if dec.evaluation_id else None
+        final = await session.get(Evaluation, dec.evaluation_id) if dec.evaluation_id else None
+        asked = await latest_evaluation(session, app)
+        basis = final or asked
+        versions = {r["code"]: r["version"] for r in (basis.rules_used if basis else [])}
+        checked = [r for r in (basis.results if basis else [])
+                   if r["status"] in ("pass", "fail", "refer")]
+        deciding = [f"{r['code']} v{r['version']}" for r in (asked.results if asked else [])
+                    if r["status"] in ("fail", "refer")]
         out.append({
             "application": _app_dict(app),
             "decision": _decision_dict(dec, names),
-            "final_evaluation": evaluation_dict(ev),
+            "final_evaluation": evaluation_dict(final),
+            "rules": {
+                "in_force": len(versions),
+                "checked": len(checked),
+                "versions": [f"{c} v{v}" for c, v in sorted(versions.items())],
+                "deciding": deciding,
+            },
         })
     return out
 
@@ -529,7 +565,7 @@ async def recent_events(session: AsyncSession, user: User, limit: int = 100) -> 
     rows = (await session.execute(
         select(Event, Application.ref).join(Application, Application.id == Event.application_id)
         .where(Application.org_id == user.org_id)
-        .order_by(Event.created_at.desc(), Event.id).limit(limit)
+        .order_by(Event.seq.desc()).limit(limit)
     )).all()
     names = await identity.user_names(session, {e.actor_id for e, _ in rows})
     return [
