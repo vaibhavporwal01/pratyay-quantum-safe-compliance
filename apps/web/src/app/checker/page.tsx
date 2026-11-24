@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Overview · Pratyay" };
 
 export default function CheckerPage() {
   return (
-    <RoleShell breadcrumb={["Overview"]}>
+    <RoleShell breadcrumb={["Overview"]} area="checker">
       <CheckerOverview />
     </RoleShell>
   );

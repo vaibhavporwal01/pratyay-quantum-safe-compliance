@@ -12,6 +12,30 @@ export const ROLE_LABEL: Record<Role, string> = {
   admin: "Administrator",
 };
 
+/**
+ * Who may open each area. Mirrors the API's require_role guards in
+ * apps/api/app/rules/router.py (Maker, Checker, Reader), so a page never offers what the API
+ * would refuse with 403.
+ */
+export const PAGE_ROLES = {
+  maker: ["maker"],
+  checker: ["checker"],
+  reader: ["maker", "checker", "auditor", "admin"],
+} as const satisfies Record<string, readonly Role[]>;
+
+export type PageArea = keyof typeof PAGE_ROLES;
+
+export function canAccess(role: Role | undefined, area: PageArea | undefined): boolean {
+  if (!area) return true;
+  return role !== undefined && (PAGE_ROLES[area] as readonly Role[]).includes(role);
+}
+
+/** "the compliance maker", "a compliance maker or compliance checker or ..." */
+export function areaAudience(area: PageArea): string {
+  const names = (PAGE_ROLES[area] as readonly Role[]).map((r) => ROLE_LABEL[r].toLowerCase());
+  return names.length === 1 ? `the ${names[0]}` : `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
+}
+
 const LIBRARY = { href: "/rules/library", label: "Rule library" };
 
 const NAV: Record<Role, { href: string; label: string }[]> = {

@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Draft from a circular · Pratyay" };
 
 export default function DraftFromCircularPage() {
   return (
-    <RoleShell breadcrumb={["Rules", "Draft from a circular"]}>
+    <RoleShell breadcrumb={["Rules", "Draft from a circular"]} area="maker">
       <DraftView />
     </RoleShell>
   );

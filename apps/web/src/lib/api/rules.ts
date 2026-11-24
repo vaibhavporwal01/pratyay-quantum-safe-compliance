@@ -7,6 +7,8 @@ export type Me = { id: string; org_id: string; role: Role; name: string; dev_sta
 export type SourceDoc = {
   id: string;
   title: string;
+  /** Citation code stored on the source, e.g. "CF". Null for an upload that gave none. */
+  short_code: string | null;
   ref_no: string | null;
   issued_on: string | null;
   url: string | null;
@@ -72,9 +74,12 @@ export type Rule = {
   status: RuleStatus;
   source_doc_id: string;
   source_doc_title: string;
+  source_doc_code: string | null;
   source_doc_ref: string | null;
   source_para: string;
   para_text: string;
+  /** The heading the paragraph sits under; context, not a quote. */
+  section: string | null;
   related: { para: string; text: string; note: string }[];
   origin: "auto" | "manual";
   made_by: string;
@@ -144,11 +149,14 @@ export function shortDocName(title: string): string {
   return m ? `${m[1].trim()} Directions` : title;
 }
 
-/** "Credit Facilities Directions" -> "CF". */
-export function docInitials(title: string): string {
-  const name = shortDocName(title).replace(/\s*Directions.*$/, "");
-  const letters = name.split(/\s+/).map((w) => w[0]).join("");
-  return letters.length >= 2 && letters.length <= 4 ? letters.toUpperCase() : name;
+/** The source's stored short code ("CF"), or its short name when the upload gave no code. */
+export function docCode(code: string | null | undefined, title: string): string {
+  return code || shortDocName(title);
+}
+
+/** "CF para 51": the anchor every rule cites. */
+export function citation(r: { source_doc_code: string | null; source_doc_title: string; source_para: string }): string {
+  return `${docCode(r.source_doc_code, r.source_doc_title)} para ${r.source_para}`;
 }
 
 export function formatDate(iso: string | null | undefined): string {
@@ -185,6 +193,7 @@ export function ruleLines(r: {
   params: Params;
   applies_to: string;
   source_doc_title?: string;
+  source_doc_code?: string | null;
   source_para?: string;
   effective_from?: string | null;
 }): [string, string][] {
@@ -201,7 +210,7 @@ export function ruleLines(r: {
     }
   }
   if (r.source_doc_title && r.source_para) {
-    lines.push(["anchor", `${docInitials(r.source_doc_title)} Directions, para ${r.source_para}`]);
+    lines.push(["anchor", `${docCode(r.source_doc_code, r.source_doc_title)} para ${r.source_para}`]);
   }
   if (r.effective_from !== undefined) lines.push(["valid_from", r.effective_from ?? "not set"]);
   return lines;

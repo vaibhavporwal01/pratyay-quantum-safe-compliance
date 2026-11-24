@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { RuleStatusTag } from "@/components/app/RuleParts";
 import { Status, Tag } from "@/components/ui";
-import { docInitials, formatDate, type Rule } from "@/lib/api/rules";
+import { citation, formatDate, type Rule } from "@/lib/api/rules";
 
 /** Rule drafts waiting for a checker, or rules already checked. */
 export function QueueList({ rules, checked = false }: { rules: Rule[]; checked?: boolean }) {
@@ -20,7 +20,7 @@ export function QueueList({ rules, checked = false }: { rules: Rule[]; checked?:
               <p className="type-small text-ink-2">
                 {checked
                   ? `${r.checked_by_name ?? "Checker"} · ${formatDate(r.checked_at)}${r.review_note ? ` · ${r.review_note}` : ""}`
-                  : `${docInitials(r.source_doc_title)} para ${r.source_para} · drafted by ${r.made_by_name ?? "unknown"} on ${formatDate(r.updated_at)}`}
+                  : `${citation(r)} · drafted by ${r.made_by_name ?? "unknown"} on ${formatDate(r.updated_at)}`}
               </p>
             </div>
             {checked ? (

@@ -7,7 +7,7 @@ import { LeaderLine, Quote, RulePreview, RuleStatusTag, TestRows } from "@/compo
 import { DataCard, Empty, ErrorState } from "@/components/app/States";
 import { Button, Card, Field, PageHead, Tag } from "@/components/ui";
 import { api, failureMessage } from "@/lib/api/client";
-import { docInitials, formatDate, ruleLines, TEMPLATE_LABEL, type Rule } from "@/lib/api/rules";
+import { citation, formatDate, ruleLines, TEMPLATE_LABEL, type Rule } from "@/lib/api/rules";
 import { cn } from "@/lib/cn";
 import { useApi } from "@/lib/useApi";
 
@@ -109,7 +109,7 @@ export function LibraryView() {
                           </span>
                         </button>
                       </td>
-                      <td className="py-3 pr-4 type-body text-ink-2">{`${docInitials(r.source_doc_title)} para ${r.source_para}`}</td>
+                      <td className="py-3 pr-4 type-body text-ink-2">{`${citation(r)}`}</td>
                       <td className="py-3 pr-4 type-mono text-ink-2">{formatDate(r.effective_from)}</td>
                       <td className={cn("py-3 pr-4 type-mono", r.effective_to ? "text-refer" : "text-ink-2")}>
                         {r.effective_to ? formatDate(r.effective_to) : "Open"}
@@ -153,7 +153,7 @@ function RuleDetail({ rule, canRetire, onRetired }: { rule: Rule; canRetire: boo
       tag={<RuleStatusTag status={rule.status} />}
     >
       <div className="flex flex-col gap-4 pt-3">
-        <p className="type-label text-muted">{`Source text · ${docInitials(rule.source_doc_title)} para ${rule.source_para}`}</p>
+        <p className="type-label text-muted">{`Source text · ${citation(rule)}`}</p>
         <Quote note={rule.source_doc_ref ? `${rule.source_doc_title} (${rule.source_doc_ref})` : rule.source_doc_title}>
           {rule.para_text}
         </Quote>

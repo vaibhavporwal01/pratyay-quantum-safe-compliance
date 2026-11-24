@@ -7,7 +7,7 @@ import { LeaderLine, Quote, RulePreview, RuleStatusTag, TestRows } from "@/compo
 import { Empty, ErrorState, Loading } from "@/components/app/States";
 import { Button, Card, Field, Icon, PageHead, Status, Tag } from "@/components/ui";
 import { api, ApiFailure, failureMessage } from "@/lib/api/client";
-import { docInitials, formatDate, ruleLines, shortDocName, type Rule, type SourceDoc } from "@/lib/api/rules";
+import { citation, formatDate, ruleLines, shortDocName, type Rule, type SourceDoc } from "@/lib/api/rules";
 import { useApi } from "@/lib/useApi";
 
 export function RuleReview() {
@@ -26,7 +26,7 @@ export function RuleReview() {
   const isMaker = r.made_by === me.id;
   const passed = r.tests.filter((t) => t.passed).length;
   const checklist: [string, boolean][] = [
-    [`Every number is in ${docInitials(r.source_doc_title)} para ${r.source_para}`, r.problems.length === 0],
+    [`Every number is in ${citation(r)}`, r.problems.length === 0],
     ["No value is missing", r.missing.length === 0],
     [r.tests.length ? `All ${r.tests.length} generated tests pass` : "Generated tests run", r.tests.length > 0 && passed === r.tests.length],
     ["Effective date is set", r.effective_from !== null],

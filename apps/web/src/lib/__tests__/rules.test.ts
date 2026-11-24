@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cleanParams } from "@/app/maker/builder/fields";
-import { docInitials, rupees, ruleLines, shortDocName, shortHash } from "../api/rules";
+import { citation, docCode, rupees, ruleLines, shortDocName, shortHash } from "../api/rules";
 import { activeTab, navForRole, roleHome } from "../roles";
 
 const CF = "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025";
@@ -8,7 +8,10 @@ const CF = "Reserve Bank of India (Non-Banking Financial Companies – Credit Fa
 describe("rule display helpers", () => {
   it("shortens Direction titles", () => {
     expect(shortDocName(CF)).toBe("Credit Facilities Directions");
-    expect(docInitials(CF)).toBe("CF");
+    expect(docCode("CF", CF)).toBe("CF");
+    expect(docCode(null, CF)).toBe("Credit Facilities Directions");
+    // Stored, not derived: a "Non-Banking ..." title never turns into "NCF".
+    expect(citation({ source_doc_code: "RBC", source_doc_title: "NBFC Responsible Business Conduct Directions, 2025", source_para: "29(2)" })).toBe("RBC para 29(2)");
     expect(shortDocName("Some circular")).toBe("Some circular");
   });
 
@@ -25,11 +28,12 @@ describe("rule display helpers", () => {
       params: { subject: "annual household income", max_paise: 30_000_000, scope: null },
       applies_to: "microfinance",
       source_doc_title: CF,
+      source_doc_code: "CF",
       source_para: "51",
       effective_from: "2025-11-28",
     });
     expect(lines).toContainEqual(["max_paise", "30000000 (₹3,00,000)"]);
-    expect(lines).toContainEqual(["anchor", "CF Directions, para 51"]);
+    expect(lines).toContainEqual(["anchor", "CF para 51"]);
     expect(lines.find(([k]) => k === "scope")).toBeUndefined();
   });
 });

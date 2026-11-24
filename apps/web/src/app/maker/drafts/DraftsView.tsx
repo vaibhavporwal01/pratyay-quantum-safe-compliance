@@ -4,7 +4,7 @@ import Link from "next/link";
 import { RuleStatusTag } from "@/components/app/RuleParts";
 import { DataCard, Empty } from "@/components/app/States";
 import { Button, PageHead, Table, TableCount, Tag, type Column } from "@/components/ui";
-import { docInitials, formatDate, type Rule } from "@/lib/api/rules";
+import { citation, formatDate, type Rule } from "@/lib/api/rules";
 import { useApi } from "@/lib/useApi";
 
 const columns: Column<Rule>[] = [
@@ -20,7 +20,7 @@ const columns: Column<Rule>[] = [
       </Link>
     ),
   },
-  { key: "source", header: "Source", width: 130, render: (r) => `${docInitials(r.source_doc_title)} para ${r.source_para}` },
+  { key: "source", header: "Source", width: 130, render: (r) => `${citation(r)}` },
   { key: "status", header: "Status", width: 110, kind: "node", render: (r) => <RuleStatusTag status={r.status} /> },
   {
     key: "note",

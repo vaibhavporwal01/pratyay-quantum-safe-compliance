@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Upload a circular · Pratyay" };
 
 export default function UploadPage() {
   return (
-    <RoleShell breadcrumb={["Rules", "Upload"]}>
+    <RoleShell breadcrumb={["Rules", "Upload"]} area="maker">
       <UploadForm />
     </RoleShell>
   );

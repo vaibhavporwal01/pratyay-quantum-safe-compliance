@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Review queue · Pratyay" };
 
 export default function ReviewQueuePage() {
   return (
-    <RoleShell breadcrumb={["Review queue"]}>
+    <RoleShell breadcrumb={["Review queue"]} area="checker">
       <ReviewQueue />
     </RoleShell>
   );

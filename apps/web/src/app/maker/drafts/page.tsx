@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Drafts · Pratyay" };
 
 export default function DraftsPage() {
   return (
-    <RoleShell breadcrumb={["Rules", "Drafts"]}>
+    <RoleShell breadcrumb={["Rules", "Drafts"]} area="maker">
       <DraftsView />
     </RoleShell>
   );

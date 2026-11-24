@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Rule library · Pratyay" };
 
 export default function LibraryPage() {
   return (
-    <RoleShell breadcrumb={["Rules"]}>
+    <RoleShell breadcrumb={["Rules"]} area="reader">
       <Suspense fallback={<Loading />}>
         <LibraryView />
       </Suspense>

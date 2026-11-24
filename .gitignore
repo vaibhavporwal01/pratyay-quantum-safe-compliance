@@ -30,6 +30,7 @@ __pycache__/
 # Node / Next.js
 node_modules/
 .next/
+apps/web/.next-build/
 out/
 *.tsbuildinfo
 apps/web/README.md

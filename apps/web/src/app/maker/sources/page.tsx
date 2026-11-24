@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Source documents · Pratyay" };
 
 export default function SourcesPage() {
   return (
-    <RoleShell breadcrumb={["Rules", "Sources"]}>
+    <RoleShell breadcrumb={["Rules", "Sources"]} area="maker">
       <SourcesView />
     </RoleShell>
   );
