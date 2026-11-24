@@ -132,6 +132,7 @@ async def ingest_pdf(
         url=url,
         file=data,
         sha3_256=digest,
+        pages=parsed.pages,
         uploaded_by=uploaded_by,
     )
     try:
