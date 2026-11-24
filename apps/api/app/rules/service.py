@@ -5,6 +5,7 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app.rules.ingest import (
     MAX_PDF_BYTES,
@@ -25,12 +26,23 @@ __all__ = [
     "get_source_doc",
     "ingest_pdf",
     "list_paragraphs",
+    "list_source_docs",
     "paragraph_sort_key",
 ]
 
 
 async def get_source_doc(session: AsyncSession, doc_id: uuid.UUID) -> SourceDoc | None:
     return await session.get(SourceDoc, doc_id)
+
+
+async def list_source_docs(session: AsyncSession) -> list[SourceDoc]:
+    """All source documents, ordered by ref_no then title (file bytes are not loaded)."""
+    rows = await session.scalars(
+        select(SourceDoc)
+        .options(defer(SourceDoc.file))
+        .order_by(SourceDoc.ref_no.nulls_last(), SourceDoc.title)
+    )
+    return list(rows)
 
 
 _NUMBER_RE = re.compile(r"^(\d+)([A-Z]*)(?:\((\d+)\))?$")
