@@ -16,7 +16,7 @@ export function AppShell({
 }: {
   breadcrumb: string[];
   user: MastheadUser;
-  tabs: NavTabItem[];
+  tabs: readonly NavTabItem[];
   activeHref: string;
   idleSeconds?: number;
   searchPlaceholder?: string;

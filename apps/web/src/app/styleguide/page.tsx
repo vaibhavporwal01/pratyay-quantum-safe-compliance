@@ -77,7 +77,7 @@ const TABS = [
   { href: "#components", number: "04", label: "Components" },
   { href: "#patterns", number: "05", label: "Patterns" },
   { href: "#trust", number: "06", label: "Trust" },
-];
+] as const;
 
 type Application = {
   id: string;
@@ -159,22 +159,16 @@ function SectionHead({ id, number, title, note }: { id: string; number: string; 
   );
 }
 
-function Section({
-  id,
-  number,
-  title,
-  note,
-  children,
-}: {
-  id: string;
-  number: string;
-  title: string;
-  note: string;
-  children: ReactNode;
-}) {
+type SectionHref = (typeof TABS)[number]["href"];
+
+/** Number and title come from TABS, so the sections always match the tabs. */
+function Section({ href, note, children }: { href: SectionHref; note: string; children: ReactNode }) {
+  const tab = TABS.find((t) => t.href === href)!;
+  const anchor = href.slice(1);
+  const headingId = `${anchor}-title`;
   return (
-    <section aria-labelledby={id} className="flex scroll-mt-6 flex-col gap-7" id={id.replace(/-title$/, "")}>
-      <SectionHead id={id} number={number} title={title} note={note} />
+    <section aria-labelledby={headingId} className="flex scroll-mt-6 flex-col gap-7" id={anchor}>
+      <SectionHead id={headingId} number={tab.number} title={tab.label} note={note} />
       {children}
     </section>
   );
@@ -210,12 +204,7 @@ export default function StyleguidePage() {
           </p>
         </div>
 
-        <Section
-          id="colour-title"
-          number="01"
-          title="Colour"
-          note="Paper and ink, one blue for the stamp, three verdict colours. Nothing else."
-        >
+        <Section href="#colour" note="Paper and ink, one blue for the stamp, three verdict colours. Nothing else.">
           <ul className="flex flex-wrap gap-x-4 gap-y-5">
             {COLOURS.map(([name, hex]) => (
               <li key={name} className="flex w-[172px] flex-col gap-1.5">
@@ -231,12 +220,7 @@ export default function StyleguidePage() {
           </ul>
         </Section>
 
-        <Section
-          id="type-title"
-          number="02"
-          title="Type"
-          note="Newsreader for titles and numerals, IBM Plex Sans for reading, IBM Plex Mono for labels and codes."
-        >
+        <Section href="#type" note="Newsreader for titles and numerals, IBM Plex Sans for reading, IBM Plex Mono for labels and codes.">
           <div className="flex flex-col">
             {TYPE_RAMP.map(([name, cls, sample]) => (
               <div key={name} className="flex items-center gap-6 overflow-hidden border-b border-rule-2 py-3">
@@ -247,7 +231,7 @@ export default function StyleguidePage() {
           </div>
         </Section>
 
-        <Section id="icons-title" number="03" title="Icons" note="Tabler, 1.75 stroke. Only icons used on the December screens.">
+        <Section href="#icons" note="Tabler, 1.75 stroke. Only icons used on the December screens.">
           <ul className="flex flex-wrap gap-x-7 gap-y-6">
             {ICON_NAMES.map((name) => (
               <li key={name} className="flex w-24 flex-col items-center gap-2 text-ink">
@@ -258,12 +242,7 @@ export default function StyleguidePage() {
           </ul>
         </Section>
 
-        <Section
-          id="components-title"
-          number="04"
-          title="Components"
-          note="Built once here, used as instances on every screen."
-        >
+        <Section href="#components" note="Built once here, used as instances on every screen.">
           <div className="flex flex-wrap items-start gap-10">
             <Specimen label="Button · Primary, Secondary, Quiet × M 40, L 48">
               <div className="grid grid-cols-[auto_auto] items-center gap-x-4 gap-y-6">
@@ -386,12 +365,7 @@ export default function StyleguidePage() {
           </div>
         </Section>
 
-        <Section
-          id="patterns-title"
-          number="05"
-          title="Patterns"
-          note="Page head, figures, cards and tables as they appear on the December screens."
-        >
+        <Section href="#patterns" note="Page head, figures, cards and tables as they appear on the December screens.">
           <PageHead
             eyebrow="§ 01 · Overview · Monday 9 Nov 2026"
             title="Anita, three applications are waiting for you."
@@ -454,12 +428,7 @@ export default function StyleguidePage() {
           </Card>
         </Section>
 
-        <Section
-          id="trust-title"
-          number="06"
-          title="Trust"
-          note="Every decision gets a receipt, every record gets a stamp."
-        >
+        <Section href="#trust" note="Every decision gets a receipt, every record gets a stamp.">
           <div className="flex flex-wrap items-start gap-10">
             <Specimen label="Decision receipt · with stamp" bare>
               <DecisionReceipt
