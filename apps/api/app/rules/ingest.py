@@ -17,12 +17,14 @@ from pathlib import Path
 
 import pdfplumber
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.rules.models import Paragraph, SourceDoc
 from app.rules.parser import Line, ParseResult, SkippedLine, parse_pages
 
 MAX_PDF_BYTES = 20 * 1024 * 1024
+SHA3_INDEX = "ix_source_docs_sha3_256"
 PDF_MAGIC = b"%PDF-"
 
 
@@ -119,16 +121,9 @@ async def ingest_pdf(
     digest = hashlib.sha3_256(data).digest()
     parsed = parse_pdf(data)
 
-    existing = await session.scalar(select(SourceDoc).where(SourceDoc.sha3_256 == digest))
+    existing = await _find_by_hash(session, digest)
     if existing is not None:
-        stored = await session.scalar(
-            select(func.count(Paragraph.id)).where(Paragraph.doc_id == existing.id)
-        )
-        report = IngestReport(
-            existing.id, digest.hex(), True, parsed.pages, stored or 0,
-            parsed.unmatched, parsed.removed,
-        )
-        return IngestResult(existing, report)
+        return await _duplicate(session, existing, digest, parsed)
 
     doc = SourceDoc(
         title=title,
@@ -139,8 +134,21 @@ async def ingest_pdf(
         sha3_256=digest,
         uploaded_by=uploaded_by,
     )
-    session.add(doc)
-    await session.flush()
+    try:
+        # Savepoint: if another upload of the same file committed after the check above, the
+        # unique index rejects this insert and only the savepoint is rolled back, leaving the
+        # caller's transaction usable.
+        async with session.begin_nested():
+            session.add(doc)
+            await session.flush()
+    except IntegrityError as exc:
+        if SHA3_INDEX not in str(exc.orig):
+            raise
+        existing = await _find_by_hash(session, digest)
+        if existing is None:  # the other upload rolled back after all
+            raise
+        return await _duplicate(session, existing, digest, parsed)
+
     session.add_all(
         Paragraph(doc_id=doc.id, number=p.number, page=p.page, text=p.text)
         for p in parsed.paragraphs
@@ -151,6 +159,23 @@ async def ingest_pdf(
         parsed.unmatched, parsed.removed,
     )
     return IngestResult(doc, report)
+
+
+async def _find_by_hash(session: AsyncSession, digest: bytes) -> SourceDoc | None:
+    return await session.scalar(select(SourceDoc).where(SourceDoc.sha3_256 == digest))
+
+
+async def _duplicate(
+    session: AsyncSession, existing: SourceDoc, digest: bytes, parsed: ParseResult
+) -> IngestResult:
+    stored = await session.scalar(
+        select(func.count(Paragraph.id)).where(Paragraph.doc_id == existing.id)
+    )
+    report = IngestReport(
+        existing.id, digest.hex(), True, parsed.pages, stored or 0,
+        parsed.unmatched, parsed.removed,
+    )
+    return IngestResult(existing, report)
 
 
 # ---- CLI --------------------------------------------------------------------------------
