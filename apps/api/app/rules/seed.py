@@ -67,6 +67,8 @@ RBC_TITLE = (
     "Directions, 2025"
 )
 # Keys are the short codes stored on each source and shown in anchors ("CF para 51").
+MODEL_SKIP_NOTE = "classifier model not found; labels left empty"
+
 DOCS = {"CF": (CF_FILE, CF_TITLE), "RBC": (RBC_FILE, RBC_TITLE)}
 
 KFS_SCOPE = "all new retail and MSME term loans sanctioned on or after October 1, 2024"
@@ -220,6 +222,9 @@ class SeedReport:
     corrected: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     left_out: list[str] = field(default_factory=list)
+    # Optional steps not run, e.g. labelling when the classifier model is not on this machine.
+    # Rules do not depend on them, so they are not problems.
+    skipped_steps: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
 
 
@@ -255,7 +260,7 @@ async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
             try:
                 await service.classify_paragraphs(session, result.doc.id)
             except service.ModelNotFound:
-                report.problems.append(f"{key}: classifier model not found; labels left empty")
+                report.skipped_steps.append(f"{key}: {MODEL_SKIP_NOTE}")
 
     await session.flush()
     for spec in RULES:
@@ -311,6 +316,8 @@ async def main() -> int:
         print(f"Corrected: {line}")
     for line in report.left_out:
         print(f"Left out: {line}")
+    for line in report.skipped_steps:
+        print(f"Skipped: {line}")
     for line in report.problems:
         print(f"Problem: {line}")
     return 0

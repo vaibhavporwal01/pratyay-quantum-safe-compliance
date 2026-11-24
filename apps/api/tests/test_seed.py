@@ -2,8 +2,10 @@
 
 from sqlalchemy import func, select
 
+from app.core.config import settings
+from app.rules import classify
 from app.rules.models import Rule, SourceDoc
-from app.rules.seed import RULES, read_header, seed
+from app.rules.seed import MODEL_SKIP_NOTE, RULES, read_header, seed
 
 SEEDED = {s.code for s in RULES}
 
@@ -11,6 +13,8 @@ SEEDED = {s.code for s in RULES}
 async def test_seed_is_idempotent_and_values_come_from_text(session) -> None:
     first = await seed(session)
     assert first.left_out == [] and first.problems == []
+    # Labelling is optional: the model is not in git, so CI skips it. Nothing else may be skipped.
+    assert all(s.endswith(MODEL_SKIP_NOTE) for s in first.skipped_steps)
     assert set(first.created) == SEEDED
 
     second = await seed(session)
@@ -76,3 +80,15 @@ def test_header_gives_reference_and_issue_date() -> None:
 
     ref, issued = read_header((SOURCES / CF_FILE).read_bytes())
     assert ref == "RBI/DOR/2025-26/347" and str(issued) == "2025-11-28"
+
+
+async def test_missing_model_is_a_skip_note_not_a_problem(session, monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(settings, "obligation_model_path", str(tmp_path / "absent.joblib"))
+    classify.load_model.cache_clear()
+    try:
+        report = await seed(session)
+    finally:
+        classify.load_model.cache_clear()
+    assert report.skipped_steps == [f"CF: {MODEL_SKIP_NOTE}", f"RBC: {MODEL_SKIP_NOTE}"]
+    assert report.problems == [] and report.left_out == []
+    assert set(report.created) == SEEDED
