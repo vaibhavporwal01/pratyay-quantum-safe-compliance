@@ -13,6 +13,7 @@ import {
   IconGavel,
   IconHistory,
   IconInfoCircle,
+  IconLogout,
   IconMenu2,
   IconPhone,
   IconPlus,
@@ -55,6 +56,7 @@ export type IconName =
   | "search"
   | "shield-check"
   | "upload"
+  | "logout"
   | "user"
   | "x";
 
@@ -80,6 +82,7 @@ const ICONS: Record<IconName, TablerIcon> = {
   search: IconSearch,
   "shield-check": IconShieldCheck,
   upload: IconUpload,
+  logout: IconLogout,
   user: IconUser,
   x: IconX,
 };

@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Avatar } from "./Avatar";
 import { IdleTimer } from "./IdleTimer";
@@ -14,6 +16,7 @@ export function Masthead({
   tag,
   menuOpen,
   onMenu,
+  onSignOut,
 }: {
   /** e.g. ["Lender A", "Overview"], shown as "LENDER A / OVERVIEW". */
   breadcrumb: string[];
@@ -25,7 +28,10 @@ export function Masthead({
   /** Narrow screens: show a menu button instead of the breadcrumb, timer, tag and user. */
   onMenu?: () => void;
   menuOpen?: boolean;
+  /** Shows "Sign out" in the account menu. */
+  onSignOut?: () => void;
 }) {
+  const [account, setAccount] = useState(false);
   // With a menu, the wide-screen items hide below 768px.
   const wide = onMenu ? "hidden md:flex" : "flex";
   return (
@@ -46,7 +52,7 @@ export function Masthead({
       {tag ? <div className={cn(wide, "shrink-0 items-center")}>{tag}</div> : null}
       {idleSeconds !== undefined ? (
         <div className={cn(wide, "shrink-0 items-center")}>
-          <IdleTimer idleSeconds={idleSeconds} />
+          <IdleTimer idleSeconds={idleSeconds} onExpire={onSignOut} />
         </div>
       ) : null}
       {user ? (
@@ -54,9 +60,13 @@ export function Masthead({
           <button type="button" aria-label="Notifications" className="shrink-0 text-ink-2 hover:text-ink">
             <Icon name="bell" size={20} />
           </button>
+          <div className="relative">
           <button
             type="button"
             aria-label={`Account menu for ${user.name}`}
+            aria-expanded={onSignOut ? account : undefined}
+            aria-controls={onSignOut ? "account-menu" : undefined}
+            onClick={() => setAccount((v) => !v)}
             className="flex shrink-0 items-center gap-2.5 text-left"
           >
             <Avatar name={user.name} />
@@ -66,6 +76,22 @@ export function Masthead({
             </span>
             <Icon name="chevron-down" size={16} className="text-muted" />
           </button>
+          {onSignOut && account ? (
+            <div
+              id="account-menu"
+              className="absolute top-full right-0 z-20 mt-2 min-w-[180px] rounded-[2px] border border-rule bg-white py-1 shadow-sm"
+            >
+              <button
+                type="button"
+                onClick={onSignOut}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left type-small-medium text-ink hover:bg-paper-2"
+              >
+                <Icon name="logout" size={16} />
+                Sign out
+              </button>
+            </div>
+          ) : null}
+          </div>
         </div>
       ) : null}
       {onMenu ? (

@@ -1,8 +1,10 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import { createContext, Suspense, useContext, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { createContext, Suspense, useCallback, useContext, useEffect, type ReactNode } from "react";
 import { AppShell } from "@/components/ui";
+import { signOut } from "@/lib/api/auth";
+import { NOT_SIGNED_IN } from "@/lib/api/client";
 import type { Me } from "@/lib/api/rules";
 import { activeTab, areaAudience, canAccess, navForRole, ROLE_LABEL, type PageArea } from "@/lib/roles";
 import { useApi } from "@/lib/useApi";
@@ -48,8 +50,18 @@ export function RoleShell({ breadcrumb, area, children }: ShellProps) {
 
 function SignedInShell({ breadcrumb, area, children }: ShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const me = useApi<Me>("/me");
   const tabs = navForRole(me.data?.role);
+  const signedOut = me.error === NOT_SIGNED_IN;
+  useEffect(() => {
+    // The session ended (idle, expired or signed out elsewhere): back to sign-in, then here.
+    if (signedOut) router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
+  }, [signedOut, pathname, router]);
+  const onSignOut = useCallback(async () => {
+    await signOut();
+    router.replace("/sign-in");
+  }, [router]);
   return (
     <AppShell
       breadcrumb={["Lender A", ...breadcrumb]}
@@ -57,6 +69,7 @@ function SignedInShell({ breadcrumb, area, children }: ShellProps) {
       tabs={tabs}
       activeHref={activeTab(tabs, pathname)}
       mastheadExtra={<DevRoleSwitcher current={me.data?.role} />}
+      onSignOut={me.data ? onSignOut : undefined}
     >
       {me.error ? (
         <ErrorState title="Not signed in" message={me.error} onRetry={me.reload} />

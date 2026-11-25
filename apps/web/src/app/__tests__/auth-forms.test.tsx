@@ -32,15 +32,48 @@ describe("SignInForm", () => {
     expect(screen.getByText(/at least 12 characters/)).toBeTruthy();
   });
 
-  it("hands the challenge to the verify page", async () => {
+  it("signs in and opens the role's home page", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      user: { id: "u1", org_id: "o1", role: "officer", name: "Anita Sharma" },
+    }), { status: 200 })));
     render(<SignInForm />);
-    fireEvent.change(screen.getByLabelText("1 · Work email"), { target: { value: "anita.sharma@lendera.example" } });
+    fireEvent.change(screen.getByLabelText("1 · Work email"), { target: { value: "anita.sharma@lender-a.in" } });
     fireEvent.change(screen.getByLabelText("2 · Password"), { target: { value: "correct-horse-battery" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/sign-in/verify"));
-    expect(JSON.parse(sessionStorage.getItem(MFA_CHALLENGE_KEY)!)).toMatchObject({
-      email: "anita.sharma@lendera.example",
-    });
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/officer"));
+    vi.unstubAllGlobals();
+  });
+
+  it("returns to ?next= after sign-in, and shows a refusal", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({
+      user: { id: "u1", org_id: "o1", role: "checker", name: "Rahul Mehta" },
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    render(<SignInForm next="/checker/review" />);
+    fireEvent.change(screen.getByLabelText("1 · Work email"), { target: { value: "rahul.mehta@lender-a.in" } });
+    fireEvent.change(screen.getByLabelText("2 · Password"), { target: { value: "correct-horse-battery" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/checker/review"));
+    cleanup();
+    fetch.mockImplementation(async () => new Response("{}", { status: 401 }));
+    render(<SignInForm />);
+    fireEvent.change(screen.getByLabelText("1 · Work email"), { target: { value: "rahul.mehta@lender-a.in" } });
+    fireEvent.change(screen.getByLabelText("2 · Password"), { target: { value: "not-the-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Email or password is incorrect.")).toBeTruthy();
+    vi.unstubAllGlobals();
+  });
+
+  it("with OTP off, the borrower link stays on sign-in", () => {
+    render(<SignInForm />);
+    const link = screen.getByRole("link", { name: /Borrower\? Sign in with your email/ });
+    expect(link.getAttribute("href")).toBe("/sign-in?as=borrower");
+    expect(screen.queryByText(/mobile number/)).toBeNull();
+  });
+
+  it("borrower tab asks for an email", () => {
+    render(<SignInForm audience="borrower" />);
+    expect(screen.getByLabelText("1 · Email")).toBeTruthy();
   });
 
   it("toggles password visibility", () => {

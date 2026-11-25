@@ -1,12 +1,9 @@
 /**
  * Auth calls for the public pages.
  *
- * UI only for now: each function returns a sample response after a short
- * delay. The shared types (`Role`, `User`) are exactly the ones in
- * docs/contracts.md ("Current user" and "Role check"). docs/contracts.md does
- * not yet define the sign-in, MFA or OTP endpoints, so their request and
- * response shapes below are provisional and must be confirmed with the
- * identity module owner before the TODOs are replaced with real calls.
+ * signIn and signOut call the API (POST /api/identity/sign-in and sign-out; the session is the
+ * httpOnly pratyay_session cookie). The authenticator (MFA) and mobile OTP calls are still
+ * samples behind NEXT_PUBLIC_ENABLE_OTP, for the identity owner to replace.
  */
 
 /** Roles from docs/contracts.md, "Role check". */
@@ -31,11 +28,10 @@ export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError 
 // Provisional shapes (not yet in docs/contracts.md).
 
 export type SignInRequest = { email: string; password: string };
-export type SignInResponse = {
-  status: "mfa_required";
-  challenge_id: string;
-  email: string;
-};
+export type SignInResponse = { user: User };
+
+/** Mobile OTP and authenticator screens: off until the identity owner wires them. */
+export const OTP_ENABLED = process.env.NEXT_PUBLIC_ENABLE_OTP === "true";
 
 export type VerifyMfaRequest = {
   challenge_id: string;
@@ -75,15 +71,44 @@ export function maskMobile(mobile: string): string {
   return `+91 ${digits.slice(0, 2)}••• ••${digits.slice(-3)}`;
 }
 
-/**
- * Staff sign-in, first step. Always asks for the authenticator code.
- * TODO(identity): replace with POST /api/identity/sign-in.
- */
+/** Email and password sign-in, staff and borrowers. Sets the session cookie. */
 export async function signIn(req: SignInRequest): Promise<ApiResult<SignInResponse>> {
-  return later({
-    ok: true,
-    data: { status: "mfa_required", challenge_id: sampleId("mfa"), email: req.email.trim().toLowerCase() },
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/identity/sign-in", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: req.email.trim(), password: req.password }),
+    });
+  } catch {
+    return { ok: false, error: { code: "invalid_credentials", message: "Cannot reach the service. Try again shortly." } };
+  }
+  if (res.ok) return { ok: true, data: (await res.json()) as SignInResponse };
+  let message = "Email or password is incorrect.";
+  if (res.status !== 401) message = res.status >= 500 ? "The service is not responding. Try again shortly." : `Sign-in failed (${res.status}).`;
+  return { ok: false, error: { code: "invalid_credentials", message } };
+}
+
+/** Ends the session on the server and clears the cookie. Never throws. */
+export async function signOut(): Promise<void> {
+  try {
+    await fetch("/api/identity/sign-out", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+  } catch {
+    // Offline: the session still ends at the server's idle timeout.
+  }
+}
+
+/** A same-site path to return to after sign-in, or null ("//evil.example" and URLs are refused). */
+export function safeNext(next: string | null | undefined): string | null {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return null;
+  if (next.startsWith("/sign-in") || next.startsWith("/sign-up")) return null;
+  return next;
 }
 
 /**
@@ -141,12 +166,12 @@ export async function verifyOtp(req: VerifyOtpRequest): Promise<ApiResult<Verify
   });
 }
 
-/** Where each role lands after signing in. These pages arrive in later P7 tasks. */
+/** Where each role lands after signing in (the first tab in lib/roles). */
 export function homeFor(role: Role): string {
   const homes: Record<Role, string> = {
     borrower: "/borrower",
     officer: "/officer",
-    maker: "/compliance",
+    maker: "/maker/sources",
     checker: "/checker",
     auditor: "/auditor",
     admin: "/admin",

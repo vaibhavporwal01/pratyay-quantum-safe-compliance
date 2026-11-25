@@ -16,7 +16,11 @@ export class ApiFailure extends Error {
 
 type Detail = string | { problems?: string[] } | { msg: string; loc?: (string | number)[] }[];
 
+/** The message for a 401; RoleShell sends the page to sign-in when it sees it. */
+export const NOT_SIGNED_IN = "You are not signed in.";
+
 function describe(status: number, detail: Detail | undefined): ApiFailure {
+  if (status === 401) return new ApiFailure(status, NOT_SIGNED_IN);
   if (typeof detail === "string") return new ApiFailure(status, detail);
   if (Array.isArray(detail)) {
     const lines = detail.map((d) => `${(d.loc ?? []).slice(1).join(".")}: ${d.msg}`);
@@ -25,7 +29,6 @@ function describe(status: number, detail: Detail | undefined): ApiFailure {
   if (detail && Array.isArray(detail.problems)) {
     return new ApiFailure(status, "The rule does not match its paragraph yet.", detail.problems);
   }
-  if (status === 401) return new ApiFailure(status, "You are not signed in.");
   if (status >= 500) return new ApiFailure(status, "The service is not responding. Try again shortly.");
   return new ApiFailure(status, `Request failed (${status}).`);
 }

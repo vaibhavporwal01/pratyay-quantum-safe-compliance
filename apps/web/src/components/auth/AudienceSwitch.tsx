@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { OTP_ENABLED } from "@/lib/api/auth";
 import { cn } from "@/lib/cn";
 
 /** Staff / Borrower switch at the top of the sign-in and sign-up cards. */
 export function AudienceSwitch({ current }: { current: "staff" | "borrower" }) {
   const items = [
     { key: "staff", label: "Staff", href: "/sign-in" },
-    { key: "borrower", label: "Borrower", href: "/sign-up" },
+    { key: "borrower", label: "Borrower", href: OTP_ENABLED ? "/sign-up" : "/sign-in?as=borrower" },
   ] as const;
   return (
     <nav aria-label="Who is signing in" className="flex w-full rounded-[4px] border border-rule bg-paper-2 p-[3px]">
