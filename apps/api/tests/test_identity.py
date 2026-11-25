@@ -47,9 +47,35 @@ async def test_unknown_cookie_role_falls_back(fake_users) -> None:
 
 async def test_outside_development_nobody_is_signed_in(fake_users, monkeypatch) -> None:
     monkeypatch.setattr(deps.settings, "app_env", "production")
+    monkeypatch.setattr(deps.settings, "allow_role_switcher", False)
     with pytest.raises(HTTPException) as exc:
         await deps.get_current_user()
     assert exc.value.status_code == 401
+
+
+async def test_role_switcher_flag_allows_the_stand_in_outside_development(
+    fake_users, monkeypatch
+) -> None:
+    monkeypatch.setattr(deps.settings, "app_env", "production")
+    monkeypatch.setattr(deps.settings, "allow_role_switcher", True)
+    token = deps._dev_role.set("checker")
+    try:
+        assert deps.dev_role() == "checker"
+    finally:
+        deps._dev_role.reset(token)
+
+
+def test_neon_urls_become_asyncpg_urls() -> None:
+    from app.core.config import asyncpg_url
+
+    neon = ("postgresql://u:p@ep-x.ap-southeast-1.aws.neon.tech/neondb"
+            "?sslmode=require&channel_binding=require")
+    assert asyncpg_url(neon) == (
+        "postgresql+asyncpg://u:p@ep-x.ap-southeast-1.aws.neon.tech/neondb?ssl=require"
+    )
+    assert asyncpg_url("postgres://u:p@h/db?ssl=require") == "postgresql+asyncpg://u:p@h/db?ssl=require"
+    local = "postgresql+asyncpg://pratyay:pratyay@localhost:5432/pratyay"
+    assert asyncpg_url(local) == local
 
 
 async def test_require_role_refuses_other_roles() -> None:

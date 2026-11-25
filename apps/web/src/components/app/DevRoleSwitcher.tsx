@@ -4,10 +4,15 @@ import { useRouter } from "next/navigation";
 import { ROLES, type Role } from "@/lib/api/auth";
 import { DEV_ROLE_COOKIE, ROLE_LABEL, roleHome } from "@/lib/roles";
 
-export const devRolesEnabled = process.env.NEXT_PUBLIC_APP_ENV === "development";
+/**
+ * On in development, and on the deployed site while NEXT_PUBLIC_ALLOW_ROLE_SWITCHER=true (the API
+ * needs ALLOW_ROLE_SWITCHER=true too). Remove with the stand-in when sign-in lands.
+ */
+export const devRolesEnabled =
+  process.env.NEXT_PUBLIC_APP_ENV === "development" || process.env.NEXT_PUBLIC_ALLOW_ROLE_SWITCHER === "true";
 
 /**
- * Development only, until sign-in lands: pick which seeded Lender A user you are.
+ * Until sign-in lands: pick which seeded Lender A user you are.
  * Sets the cookie the API reads, then opens that role's home page.
  */
 export function DevRoleSwitcher({ current }: { current?: Role }) {

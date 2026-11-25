@@ -13,14 +13,19 @@ export const ROLE_LABEL: Record<Role, string> = {
 };
 
 /**
- * Who may open each area. Mirrors the API's require_role guards in
- * apps/api/app/rules/router.py (Maker, Checker, Reader), so a page never offers what the API
- * would refuse with 403.
+ * Who may open each area. Mirrors the API's require_role guards in apps/api/app/rules/router.py,
+ * apps/api/app/loans/router.py and apps/api/app/admin/router.py, so a page never offers what the
+ * API would refuse with 403.
  */
 export const PAGE_ROLES = {
   maker: ["maker"],
   checker: ["checker"],
   reader: ["maker", "checker", "auditor", "admin"],
+  borrower: ["borrower"],
+  officer: ["officer"],
+  auditor: ["auditor", "admin"],
+  cryptolab: ["checker", "auditor", "admin"],
+  admin: ["admin"],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type PageArea = keyof typeof PAGE_ROLES;
@@ -37,6 +42,7 @@ export function areaAudience(area: PageArea): string {
 }
 
 const LIBRARY = { href: "/rules/library", label: "Rule library" };
+const CRYPTO_LAB = { href: "/crypto-lab", label: "Crypto lab" };
 
 const NAV: Record<Role, { href: string; label: string }[]> = {
   maker: [
@@ -47,12 +53,34 @@ const NAV: Record<Role, { href: string; label: string }[]> = {
   checker: [
     { href: "/checker", label: "Overview" },
     { href: "/checker/review", label: "Review queue" },
+    { href: "/checker/decisions", label: "Decisions to sign" },
+    LIBRARY,
+    CRYPTO_LAB,
+  ],
+  auditor: [
+    { href: "/auditor", label: "Ledger" },
+    { href: "/auditor/verify", label: "Verify" },
+    { href: "/auditor/findings", label: "Findings" },
+    CRYPTO_LAB,
     LIBRARY,
   ],
-  auditor: [LIBRARY],
-  admin: [LIBRARY],
-  officer: [],
-  borrower: [],
+  admin: [
+    { href: "/admin", label: "Users and roles" },
+    { href: "/admin/keys", label: "Signing keys" },
+    { href: "/auditor", label: "Ledger" },
+    LIBRARY,
+  ],
+  officer: [
+    { href: "/officer", label: "Overview" },
+    { href: "/officer/applications", label: "Applications" },
+    { href: "/officer/decisions", label: "Decisions" },
+  ],
+  borrower: [
+    { href: "/borrower", label: "Home" },
+    { href: "/borrower/apply", label: "Application" },
+    { href: "/borrower/key-facts", label: "Key facts" },
+    { href: "/borrower/receipt", label: "Receipt" },
+  ],
 };
 
 /** Numbered section tabs for a role, as in the Dec v1 masthead. */
@@ -60,7 +88,7 @@ export function navForRole(role: Role | undefined): NavTabItem[] {
   return (role ? NAV[role] : []).map((t, i) => ({ ...t, number: String(i + 1).padStart(2, "0") }));
 }
 
-/** Where the role switcher sends each role. Officer and borrower pages are not built yet. */
+/** Where the role switcher sends each role: the first tab. */
 export function roleHome(role: Role): string {
   return NAV[role][0]?.href ?? "/rules/library";
 }

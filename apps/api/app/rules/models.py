@@ -107,6 +107,9 @@ TEMPLATES = (
     "required_disclosure",
 )
 APPLIES_TO = ("microfinance", "all")
+# When in a loan's life a rule is checked. The engine checks only "origination" rules on an
+# application; the others are reported as not checked at this stage.
+STAGES = ("origination", "servicing", "recovery")
 
 
 class Rule(Base):
@@ -119,6 +122,7 @@ class Rule(Base):
         CheckConstraint(f"status IN {RULE_STATUSES}", name="status"),
         CheckConstraint(f"template IN {TEMPLATES}", name="template"),
         CheckConstraint(f"applies_to IN {APPLIES_TO}", name="applies_to"),
+        CheckConstraint(f"stage IN {STAGES}", name="stage"),
         CheckConstraint("origin IN ('auto', 'manual')", name="origin"),
         CheckConstraint(
             "effective_to IS NULL OR effective_from IS NULL OR effective_to >= effective_from",
@@ -139,6 +143,7 @@ class Rule(Base):
     template: Mapped[str] = mapped_column(Text)
     params: Mapped[dict[str, Any]] = mapped_column(JSONB)
     applies_to: Mapped[str] = mapped_column(Text, server_default=text("'all'"))
+    stage: Mapped[str] = mapped_column(Text, server_default=text("'origination'"))
     # Null when the source gives no date we could verify.
     effective_from: Mapped[date | None] = mapped_column(Date)
     effective_to: Mapped[date | None] = mapped_column(Date)

@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { Status } from "@/components/ui/Status";
 import { Tag } from "@/components/ui/Tag";
 import { cn } from "@/lib/cn";
 import { ReceiptLine, type ReceiptLineData } from "./ReceiptLine";
@@ -41,7 +42,11 @@ export type DecisionReceiptProps = {
   outcome: string;
   lines: ReceiptLineData[];
   checks?: ReceiptLineData[];
-  seal: {
+  /**
+   * The ledger seal. Omit until the record is signed: the receipt then says "Signature pending"
+   * and shows no hash or barcode. Never pass placeholder hashes.
+   */
+  seal?: {
     /** Short form shown on the receipt, e.g. "7f3a91c2…e04b5d18". */
     hash: string;
     prev: string;
@@ -99,16 +104,25 @@ export function DecisionReceipt({
           </>
         ) : null}
         <Divider />
-        <div className="flex flex-col gap-[3px] type-mono text-muted">
-          <p className="whitespace-pre">{`SHA3-256  ${seal.hash}`}</p>
-          <p className="whitespace-pre">{`Prev      ${seal.prev}`}</p>
-          <p className="whitespace-nowrap">{seal.signature}</p>
-        </div>
-        <div aria-hidden className="flex h-[30px] gap-0.5">
-          {barcodeWidths(seal.hash).map((w, i) => (
-            <span key={i} className="h-full shrink-0 bg-ink" style={{ width: w }} />
-          ))}
-        </div>
+        {seal ? (
+          <>
+            <div className="flex flex-col gap-[3px] type-mono text-muted">
+              <p className="whitespace-pre">{`SHA3-256  ${seal.hash}`}</p>
+              <p className="whitespace-pre">{`Prev      ${seal.prev}`}</p>
+              <p className="whitespace-nowrap">{seal.signature}</p>
+            </div>
+            <div aria-hidden className="flex h-[30px] gap-0.5">
+              {barcodeWidths(seal.hash).map((w, i) => (
+                <span key={i} className="h-full shrink-0 bg-ink" style={{ width: w }} />
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <Status status="pending" label="Signature pending" />
+            <p className="type-caption text-muted">Verification available when signing is enabled.</p>
+          </div>
+        )}
       </div>
       <Perforation edge="bottom" />
       {stampDate ? (

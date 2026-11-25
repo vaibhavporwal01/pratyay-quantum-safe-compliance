@@ -22,7 +22,7 @@ from sqlalchemy.orm import defer
 from app.audit import service as audit
 from app.identity.deps import User
 from app.rules import templates
-from app.rules.models import APPLIES_TO, Paragraph, Rule, SourceDoc
+from app.rules.models import APPLIES_TO, STAGES, Paragraph, Rule, SourceDoc
 
 TRANSITIONS: dict[tuple[str, str], str] = {
     ("draft", "approve"): "approved",
@@ -122,6 +122,9 @@ async def create_draft(session: AsyncSession, user: User, data: dict[str, Any]) 
     related = await _related_from_ids(session, para.doc_id, data.get("related") or [])
     if data["applies_to"] not in APPLIES_TO:
         raise InvalidRule([f"applies_to: must be one of {', '.join(APPLIES_TO)}"])
+    stage = data.get("stage") or "origination"
+    if stage not in STAGES:
+        raise InvalidRule([f"stage: must be one of {', '.join(STAGES)}"])
     if errors := validate_rule(data["template"], data["params"], para.text, related):
         raise InvalidRule(errors)
     rule = Rule(
@@ -130,6 +133,7 @@ async def create_draft(session: AsyncSession, user: User, data: dict[str, Any]) 
         template=data["template"],
         params=data["params"],
         applies_to=data["applies_to"],
+        stage=stage,
         effective_from=data.get("effective_from"),
         status="draft",
         source_doc_id=para.doc_id,
@@ -163,6 +167,8 @@ async def update_draft(
     applies_to = data.get("applies_to") or rule.applies_to
     if applies_to not in APPLIES_TO:
         raise InvalidRule([f"applies_to: must be one of {', '.join(APPLIES_TO)}"])
+    if data.get("stage") and data["stage"] not in STAGES:
+        raise InvalidRule([f"stage: must be one of {', '.join(STAGES)}"])
     if errors := validate_rule(template, params, rule.para_text, related):
         raise InvalidRule(errors)
     for key in ("code", "title"):
@@ -172,6 +178,8 @@ async def update_draft(
         rule.effective_from = data["effective_from"]
     if "section" in data:
         rule.section = data["section"] or None
+    if data.get("stage"):
+        rule.stage = data["stage"]
     rule.template, rule.params, rule.applies_to, rule.related = (
         template, params, applies_to, related,
     )
@@ -281,3 +289,56 @@ async def source_docs_by_id(session: AsyncSession, ids: set[uuid.UUID]) -> dict[
         select(SourceDoc).options(defer(SourceDoc.file)).where(SourceDoc.id.in_(ids))
     )
     return {d.id: d for d in rows}
+
+
+async def set_stage(session: AsyncSession, user: User, rule_id: uuid.UUID, stage: str) -> Rule:
+    """Change when a rule is checked (origination, servicing or recovery). Audited."""
+    if stage not in STAGES:
+        raise InvalidRule([f"stage: must be one of {', '.join(STAGES)}"])
+    rule = await get_rule(session, rule_id)
+    if rule.stage != stage:
+        previous, rule.stage = rule.stage, stage
+        await session.flush()
+        await audit.log_event(
+            session, user.id, "rule.stage_set", f"rule:{rule.id}",
+            {"code": rule.code, "from": previous, "to": stage},
+        )
+    return rule
+
+
+async def set_effective_to(
+    session: AsyncSession, user: User, rule_id: uuid.UUID, effective_to: date, note: str
+) -> Rule:
+    """End an approved rule on a date set by a later source (for example an amendment that
+    deletes its paragraph). The rule stays approved and applies before that date. The note must
+    cite the source. A checker's step, audited."""
+    rule = await get_rule(session, rule_id)
+    if rule.status != "approved":
+        raise WorkflowError(f"Cannot set an end date on a rule that is {rule.status}.")
+    if rule.made_by == user.id:
+        raise MakerIsChecker("The maker of a rule cannot also set its end date.")
+    if not (note and note.strip()):
+        raise WorkflowError("A note citing the source is needed to set an end date.")
+    if rule.effective_from and effective_to < rule.effective_from:
+        raise InvalidRule(["effective_to: before effective_from"])
+    previous = rule.effective_to
+    rule.effective_to = effective_to
+    rule.review_note = note.strip()
+    rule.checked_by = user.id
+    rule.checked_at = datetime.now(UTC)
+    await session.flush()
+    await audit.log_event(
+        session, user.id, "rule.effective_to_set", f"rule:{rule.id}",
+        {"code": rule.code, "from": previous.isoformat() if previous else None,
+         "to": effective_to.isoformat(), "note": rule.review_note},
+    )
+    return rule
+
+
+async def rule_version(session: AsyncSession, rule: Rule) -> int:
+    """1 for a rule that supersedes nothing, 2 for its first replacement, and so on."""
+    version, prev = 1, rule.supersedes_rule_id
+    while prev is not None:
+        version += 1
+        prev = await session.scalar(select(Rule.supersedes_rule_id).where(Rule.id == prev))
+    return version

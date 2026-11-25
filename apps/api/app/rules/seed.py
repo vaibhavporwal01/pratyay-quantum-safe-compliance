@@ -57,6 +57,11 @@ class RuleSpec:
     related: list[dict[str, str]] = field(default_factory=list)
     # A heading the paragraph sits under; checked against the PDF text before it is stored.
     section: str | None = None
+    # When in the loan's life the rule is checked: origination, servicing or recovery.
+    stage: str = "origination"
+    # Set when a later source ends the rule, with a note citing that source.
+    effective_to: date | None = None
+    effective_to_note: str | None = None
 
 
 CF_TITLE = (
@@ -73,6 +78,12 @@ DOCS = {"CF": (CF_FILE, CF_TITLE), "RBC": (RBC_FILE, RBC_TITLE)}
 
 KFS_SCOPE = "all new retail and MSME term loans sanctioned on or after October 1, 2024"
 KFS_SCOPE_NOTE = "Scope of paragraph 29: credit card receivables are exempted."
+
+MF05_END_NOTE = (
+    "In force through 31 Dec 2026 (effective_to 1 Jan 2027, exclusive): the Reserve Bank of India (Non-Banking Financial Companies - Responsible "
+    "Business Conduct) (Third Amendment) Directions, 2026 (RBI/2026-27/230, 6 Aug 2026) delete "
+    "paragraph 91 with effect from 1 Jan 2027. That amendment is not in data/sources."
+)
 
 RULES: list[RuleSpec] = [
     RuleSpec(
@@ -130,6 +141,7 @@ RULES: list[RuleSpec] = [
          "unless": "explicit consent of the borrower", "scope": KFS_SCOPE},
         "all",
         related=[{"para": "29", "note": KFS_SCOPE_NOTE}],
+        stage="servicing",
     ),
     RuleSpec(
         "RBC", "81", "MF-04", "No pre-payment charge on microfinance loans",
@@ -143,6 +155,7 @@ RULES: list[RuleSpec] = [
         {"charge": "delayed payment charge on the entire loan amount",
          "unless": "applied on the overdue amount", "scope": "microfinance loans"},
         "microfinance",
+        stage="servicing",
     ),
     RuleSpec(
         "RBC", "91(2)", "MF-05", "Recovery calls only between 9:00 a.m. and 6:00 p.m.",
@@ -152,6 +165,10 @@ RULES: list[RuleSpec] = [
         related=[{"para": "91", "note": "These practices are deemed harsh methods of "
                                         "recovery."}],
         section="H. Conduct towards Microfinance borrowers",
+        stage="recovery",
+        # Exclusive: para 91 applies through 31 Dec 2026 and not from 1 Jan 2027.
+        effective_to=date(2027, 1, 1),
+        effective_to_note=MF05_END_NOTE,
     ),
 ]
 
@@ -228,6 +245,16 @@ class SeedReport:
     problems: list[str] = field(default_factory=list)
 
 
+async def _apply_end_date(
+    session: AsyncSession, checker: User, rule: Any, spec: RuleSpec, report: "SeedReport"
+) -> None:
+    if spec.effective_to and rule.status == "approved" and rule.effective_to != spec.effective_to:
+        await service.set_effective_to(
+            session, checker, rule.id, spec.effective_to, spec.effective_to_note or ""
+        )
+        report.corrected.append(f"{spec.code}: effective_to set to {spec.effective_to}")
+
+
 async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
     report = SeedReport(users_added=await identity.seed_dev_users(session))
     maker_row = await identity.first_user_with_role(session, "maker")
@@ -271,6 +298,10 @@ async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
             section = None
         live = await service.find_rule(session, doc_id, spec.code)
         if live and same_citation(live, spec, section):
+            if live.stage != spec.stage:
+                await service.set_stage(session, checker, live.id, spec.stage)
+                report.corrected.append(f"{spec.code}: stage set to {spec.stage}")
+            await _apply_end_date(session, checker, live, spec, report)
             report.skipped.append(spec.code)
             continue
         if live:
@@ -293,12 +324,14 @@ async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
             "params": params, "applies_to": spec.applies_to,
             "effective_from": issued[spec.doc], "paragraph_id": para.id,
             "related": spec.related, "origin": "manual", "section": section,
+            "stage": spec.stage,
             "supersedes_rule_id": live.id if live else None,
         })
         if missing:
             report.created.append(f"{spec.code} (draft: values missing)")
             continue
         await service.approve(session, checker, rule.id, "Seeded from the source PDF.")
+        await _apply_end_date(session, checker, rule, spec, report)
         report.created.append(spec.code)
     return report
 

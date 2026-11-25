@@ -123,6 +123,7 @@ class RuleCreate(BaseModel):
     template: str
     params: dict[str, Any]
     applies_to: str = "all"
+    stage: str = "origination"
     effective_from: date | None = None
     paragraph_id: uuid.UUID
     section: str | None = Field(default=None, max_length=200)
@@ -136,6 +137,7 @@ class RuleUpdate(BaseModel):
     template: str | None = None
     params: dict[str, Any] | None = None
     applies_to: str | None = None
+    stage: str | None = None
     effective_from: date | None = None
     section: str | None = Field(default=None, max_length=200)
     related: list[RelatedIn] | None = None
@@ -152,6 +154,7 @@ class RuleOut(BaseModel):
     template: str
     params: dict[str, Any]
     applies_to: str
+    stage: str
     effective_from: date | None
     effective_to: date | None
     status: str

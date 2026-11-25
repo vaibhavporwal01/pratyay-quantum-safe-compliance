@@ -13,12 +13,12 @@ const ANNOTATIONS = [
   ["A", "The request failed MF-02: repayments would reach 53.3% of household income."],
   ["B", "The offer is the largest loan that fits: ₹66,000 at 49.95%."],
   ["C", "The fee is counted in the APR, so 24% interest shows as 25.07%."],
-  ["D", "The record is chained with SHA3-256 and signed with ML-DSA-65."],
+  ["D", "Signing with ML-DSA-65 comes with the trust layer. Until then the receipt says Signature pending."],
 ] as const;
 
 const HERO_STATS = [
-  ["12", "rules at origination"],
-  ["4", "stages, in journey order"],
+  ["8", "rules in force from two RBI Directions"],
+  ["3", "stages: origination, servicing, recovery"],
   ["3,309 B", "ML-DSA-65 signature"],
 ] as const;
 
@@ -55,20 +55,20 @@ const STEPS = [
   {
     n: "02",
     title: "Check the application",
-    text: "Twelve rules run in journey order: onboarding, assessment, offer, disbursal. A failed hard limit always names its paragraph.",
-    mono: ["MF-01  ₹2,64,000 a year      PASS", "GR-01  3 lenders, max 3      PASS", "MF-02  53.3% at ₹80,000      FAIL"],
+    text: "Each rule in force is checked at its stage: origination now, servicing and recovery later. A failed limit always names its paragraph.",
+    mono: ["MF-01  ₹2,64,000 a year      PASS", "MF-04  no pre-payment charge PASS", "MF-02  53.3% at ₹80,000      FAIL"],
   },
   {
     n: "03",
     title: "Size the offer",
-    text: "The engine finds the largest loan that keeps repayments within 50% of income and total debt within ₹2 lakh.",
-    mono: ["E_max = 0.5 x 22,000 - 7,500", "      = ₹3,500 a month", "L_max ≈ ₹66,199  ->  ₹66,000"],
+    text: "The engine finds the largest loan that keeps repayments within 50% of income, rounded down to ₹1,000.",
+    mono: ["E_max = 0.5 x 22,000 - 7,500", "      = ₹3,500 a month", "L_max = ₹66,198.74 -> ₹66,000"],
   },
   {
     n: "04",
     title: "Sign the record",
-    text: "The decision is chained with SHA3-256 and signed with ML-DSA-65. Anyone with the lender's public key can check it.",
-    mono: ["#1203  7f3a91c2…e04b5d18", "prev   2b8d4a10…77fe03c9", "sig    ML-DSA-65, 3,309 B"],
+    text: "The decision will be chained with SHA3-256 and signed with ML-DSA-65, so anyone with the lender's public key can check it.",
+    mono: ["hash   SHA3-256, 32 B", "sig    ML-DSA-65, 3,309 B", "now    Signature pending"],
   },
 ];
 
@@ -131,7 +131,6 @@ const TEAM = [
 const STANDARDS = [
   "RBI (NBFC – Credit Facilities) Directions, 2025",
   "RBI (NBFC – Responsible Business Conduct) Directions, 2025",
-  "MFIN guardrails, 25 Nov 2024",
   "NIST FIPS 203 and FIPS 204, 13 Aug 2024",
   "Digital Personal Data Protection Act, 2023",
 ];
@@ -264,13 +263,7 @@ export default function LandingPage() {
                 { label: "Total repayment", value: "₹83,736" },
                 { label: "APR", value: "25.07%", tone: "total" },
               ]}
-              checks={[{ label: "Rules", value: "10 pass · 1 flagged · 1 pending" }]}
-              seal={{
-                hash: "7f3a91c2…e04b5d18",
-                prev: "2b8d4a10…77fe03c9",
-                signature: "ML-DSA-65 signature · 3,309 B",
-              }}
-              stampDate="12 Oct 2026"
+              checks={[{ label: "Rules", value: "5 pass · 3 later stage" }]}
             />
             <ol aria-label="What the receipt shows" className="flex flex-col gap-3 sm:flex-1 sm:justify-between xl:w-[168px] xl:flex-none">
               {ANNOTATIONS.map(([letter, text]) => (
@@ -377,48 +370,49 @@ export default function LandingPage() {
               <p className="type-label">APP-2026-0142 · rule by rule</p>
               <p className="type-mono">As of 12 Oct 2026</p>
             </div>
+            {/* Rows and figures are the engine's output for APP-2026-0142 (apps/api tests/test_engine.py). */}
             <LedgerRow
               id="MF-01"
               title="Microfinance loan"
-              source="Household income up to ₹3,00,000 a year"
-              value="₹2,64,000"
-              status="pass"
-            />
-            <LedgerRow
-              id="GR-01"
-              title="Microfinance lenders, max 3"
-              source="MFIN guardrails, v2 from 1 Apr 2025"
-              value="2 + this one = 3"
-              status="pass"
-            />
-            <LedgerRow
-              id="GR-03"
-              title="No loan if over 60 days overdue"
-              source="MFIN guardrails"
-              value="worst delay 15 days"
+              source="CF para 51 · household income up to ₹3,00,000 a year"
+              value="₹2,64,000 ≤ ₹3,00,000"
               status="pass"
             />
             <LedgerRow
               id="MF-02"
               title="Repayments within 50% of income, at ₹80,000"
-              source="CF Directions, paras 55 and 56"
+              source="CF para 55 · ₹7,500 existing + ₹4,230 new EMI"
               value="₹11,730 = 53.3%"
               status="fail"
             />
-            <LedgerRow id="E_max" title="Largest new EMI" source="0.5 × income − existing EMIs" value="₹3,500" />
-            <LedgerRow id="L_max" title="Largest loan for that EMI" source="24 months at 2% a month" value="≈ ₹66,199" />
-            <LedgerRow
-              id="GR-02"
-              title="Total debt within ₹2 lakh"
-              source="MFIN guardrails"
-              value="room ₹1,54,000"
-              status="pass"
-            />
+            <LedgerRow id="E_max" title="Largest new EMI" source="0.5 × ₹22,000 − ₹7,500" value="₹3,500" />
+            <LedgerRow id="L_max" title="Largest loan for that EMI" source="24 months at 2% a month, rounded down to ₹1,000" value="₹66,198.74" />
             <LedgerRow
               id="MF-02"
               title="Repayments within 50% of income, at ₹66,000"
-              source="CF Directions, paras 55 and 56"
+              source="CF para 55 · ₹7,500 existing + ₹3,489 new EMI"
               value="₹10,989 = 49.95%"
+              status="pass"
+            />
+            <LedgerRow
+              id="MF-04"
+              title="No pre-payment charge"
+              source="RBC para 81"
+              value="Nil"
+              status="pass"
+            />
+            <LedgerRow
+              id="KF-01"
+              title="KFS valid for 3 working days"
+              source="RBC para 29(2) · weekends skipped, holidays not modelled"
+              value="issued with the offer"
+              status="pass"
+            />
+            <LedgerRow
+              id="KF-03"
+              title="KFS includes the APR computation sheet"
+              source="RBC para 29(3) · 12 × 2.089% monthly IRR"
+              value="APR 25.07%"
               status="pass"
             />
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-ink pt-4">

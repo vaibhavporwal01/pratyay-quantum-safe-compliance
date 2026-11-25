@@ -67,20 +67,26 @@ describe("builder params", () => {
 describe("navigation by role", () => {
   it("gives makers and checkers their own tabs", () => {
     expect(navForRole("maker").map((t) => t.label)).toEqual(["Sources", "Drafts", "Rule library"]);
-    expect(navForRole("checker").map((t) => t.number)).toEqual(["01", "02", "03"]);
-    expect(navForRole("officer")).toEqual([]);
+    expect(navForRole("checker").map((t) => t.number)).toEqual(["01", "02", "03", "04", "05"]);
+    expect(navForRole("officer").map((t) => t.label)).toEqual(["Overview", "Applications", "Decisions"]);
+    expect(navForRole("borrower").map((t) => t.label)).toEqual(["Home", "Application", "Key facts", "Receipt"]);
+    expect(navForRole("auditor").map((t) => t.label)).toEqual(["Ledger", "Verify", "Findings", "Crypto lab", "Rule library"]);
   });
 
   it("sends each role home", () => {
     expect(roleHome("maker")).toBe("/maker/sources");
     expect(roleHome("checker")).toBe("/checker");
-    expect(roleHome("officer")).toBe("/rules/library");
+    expect(roleHome("officer")).toBe("/officer");
+    expect(roleHome("borrower")).toBe("/borrower");
+    expect(roleHome("auditor")).toBe("/auditor");
+    expect(roleHome("admin")).toBe("/admin");
   });
 
   it("marks the longest matching tab", () => {
     const tabs = navForRole("checker");
     expect(activeTab(tabs, "/checker/review/abc")).toBe("/checker/review");
     expect(activeTab(tabs, "/checker")).toBe("/checker");
+    expect(activeTab(tabs, "/checker/decisions")).toBe("/checker/decisions");
     expect(activeTab(tabs, "/elsewhere")).toBe("");
   });
 });
