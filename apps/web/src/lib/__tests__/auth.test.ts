@@ -36,7 +36,7 @@ describe("auth sample API", () => {
   it("signs out with a JSON POST", async () => {
     const fetch = stubFetch(204, {});
     await signOut();
-    expect(fetch.mock.calls[0][0]).toBe("/api/identity/sign-out");
+    expect((fetch.mock.calls[0] as unknown as [string])[0]).toBe("/api/identity/sign-out");
   });
 
   it("only returns to paths on this site", () => {
