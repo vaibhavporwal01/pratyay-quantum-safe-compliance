@@ -99,6 +99,16 @@ class CheckOut(BaseModel):
     problems: list[str]
     missing: list[str]
     tests: list[BoundaryTestOut]
+    # Facts the engine cannot read: the rule can be approved but evaluates as refer.
+    fact_notes: list[str] = []
+
+
+class FactOut(BaseModel):
+    key: str
+    label: str
+    unit: str
+    stored: bool
+    note: str
 
 
 # ---- rules -----------------------------------------------------------------------------
@@ -178,6 +188,7 @@ class RuleOut(BaseModel):
     missing: list[str]
     problems: list[str]
     tests: list[BoundaryTestOut]
+    fact_notes: list[str] = []
 
 
 class OverviewOut(BaseModel):

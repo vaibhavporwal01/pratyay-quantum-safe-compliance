@@ -90,7 +90,8 @@ RULES: list[RuleSpec] = [
         "CF", "51", "MF-01", "Microfinance loan: household income up to ₹3,00,000",
         "max_amount",
         {"subject": "annual household income", "max_paise": Pick("amount"),
-         "scope": "collateral-free loan"},
+         "scope": "collateral-free loan", "fact": "household_income_annual_paise",
+         "must_be_false": "collateral", "decides_scope": True},
         "microfinance",
     ),
     RuleSpec(
@@ -99,7 +100,8 @@ RULES: list[RuleSpec] = [
         {"numerator": "monthly loan repayment obligations of the household",
          "denominator": "monthly household income", "max_percent": Pick("percent"),
          "exclude": ["future expected income from the asset/ activity financed"],
-         "scope": "microfinance loan"},
+         "scope": "microfinance loan", "numerator_fact": "monthly_repayments_paise",
+         "denominator_fact": "household_income_monthly_paise", "offer_on_fail": True},
         "microfinance",
         related=[
             {"para": "56", "note": "All outstanding loans of the household, collateral-free and "
@@ -114,7 +116,7 @@ RULES: list[RuleSpec] = [
         "required_disclosure",
         {"item": "computation sheet of Annual Percentage Rate (APR)",
          "includes": ["all charges which are levied by the NBFC"],
-         "scope": KFS_SCOPE},
+         "scope": KFS_SCOPE, "fact": "apr_computation_sheet"},
         "all",
         related=[
             {"para": "29", "note": KFS_SCOPE_NOTE},
@@ -130,7 +132,7 @@ RULES: list[RuleSpec] = [
              {"min_days": Pick("days", 0), "tenor_days_min": Pick("days", 1)},
              {"min_days": Pick("days", 2), "tenor_days_below": Pick("days", 3)},
          ],
-         "scope": KFS_SCOPE},
+         "scope": KFS_SCOPE, "fact": "kfs_validity_working_days"},
         "all",
         related=[{"para": "29", "note": KFS_SCOPE_NOTE}],
     ),
@@ -146,7 +148,8 @@ RULES: list[RuleSpec] = [
     RuleSpec(
         "RBC", "81", "MF-04", "No pre-payment charge on microfinance loans",
         "prohibited_charge",
-        {"charge": "pre-payment charge", "scope": "microfinance loans"},
+        {"charge": "pre-payment charge", "scope": "microfinance loans",
+         "fact": "prepayment_charge_paise"},
         "microfinance",
     ),
     RuleSpec(

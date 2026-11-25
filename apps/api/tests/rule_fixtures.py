@@ -48,6 +48,19 @@ RULES = [
 ]
 
 
+# Fact fields the template engine reads (added by migration 0008; the seed writes them too).
+# RULES above keeps the params as they were stored before 0008.
+FACT_FIELDS = {
+    "MF-01": {"fact": "household_income_annual_paise", "must_be_false": "collateral",
+              "decides_scope": True},
+    "MF-02": {"numerator_fact": "monthly_repayments_paise",
+              "denominator_fact": "household_income_monthly_paise", "offer_on_fail": True},
+    "MF-04": {"fact": "prepayment_charge_paise"},
+    "KF-01": {"fact": "kfs_validity_working_days"},
+    "KF-03": {"fact": "apr_computation_sheet"},
+}
+
+
 async def add_rule_set(session: AsyncSession) -> dict[str, Rule]:
     docs = {}
     for code in ("CF", "RBC"):
@@ -59,7 +72,8 @@ async def add_rule_set(session: AsyncSession) -> dict[str, Rule]:
     rules = {}
     for doc, para, code, template, applies, stage, params, text in RULES:
         rule = Rule(
-            code=code, title=code, template=template, params=params, applies_to=applies,
+            code=code, title=code, template=template,
+            params={**params, **FACT_FIELDS.get(code, {})}, applies_to=applies,
             stage=stage, effective_from=ISSUED, status="approved", source_doc_id=docs[doc].id,
             source_para=para, para_text=text, origin="manual", made_by=maker, checked_by=checker,
         )

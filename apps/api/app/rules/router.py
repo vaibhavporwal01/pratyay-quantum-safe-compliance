@@ -18,11 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.identity.deps import User, require_role
+from app.rules import facts as rule_facts
 from app.rules import service, templates
 from app.rules.extract import extract
 from app.rules.schemas import (
     CheckIn,
     CheckOut,
+    FactOut,
     IngestReportOut,
     OverviewOut,
     ParagraphOut,
@@ -164,7 +166,14 @@ async def check_rule(body: CheckIn, session: Session, user: Reader) -> dict:
         "problems": [],
         "missing": templates.missing_values(body.template, body.params),
         "tests": [t.as_dict() for t in templates.boundary_tests(body.template, body.params)],
+        "fact_notes": rule_facts.notes(body.template, body.params),
     }
+
+
+@router.get("/facts", response_model=list[FactOut])
+async def fact_catalogue(user: Reader) -> list[dict]:
+    """The facts a rule can check, for the rule builder's dropdowns."""
+    return [f.as_dict() for f in rule_facts.CATALOGUE]
 
 
 @router.post("/extract")
