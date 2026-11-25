@@ -12,6 +12,7 @@ dependencies = [
   "cryptography>=47",
   "scikit-learn>=1.9.1",
   "joblib>=1.6.0",
+  "argon2-cffi>=25.1.0",
 ]
 
 [dependency-groups]

@@ -337,10 +337,19 @@ async def seed(session: AsyncSession, sources: Path = SOURCES) -> SeedReport:
 
 
 async def main() -> int:
+    from app.identity.seed import SeedPasswordError, print_users, seed_password, seed_passwords
+
+    try:
+        password = seed_password()
+    except SeedPasswordError as exc:
+        print(exc, file=sys.stderr)
+        return 2
     async with SessionLocal() as session:
         report = await seed(session)
+        users = await seed_passwords(session, password)
         await session.commit()
     print(f"Users added: {report.users_added}")
+    print_users(users)
     for key, line in report.docs.items():
         print(f"{key}: {line}")
     print(f"Rules created: {', '.join(report.created) or 'none'}")
