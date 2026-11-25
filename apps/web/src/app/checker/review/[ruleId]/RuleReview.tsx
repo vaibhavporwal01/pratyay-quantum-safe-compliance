@@ -108,6 +108,9 @@ export function RuleReview() {
             {r.problems.length ? (
               <ErrorState title="Does not match the paragraph" message="The maker must fix these first." problems={r.problems} />
             ) : null}
+            {r.fact_notes?.length ? (
+              <p role="note" className="type-small text-refer">{r.fact_notes.join(" ")}</p>
+            ) : null}
           </div>
         </Card>
         <Card
