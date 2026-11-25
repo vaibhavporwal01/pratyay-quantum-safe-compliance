@@ -11,6 +11,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.core.config import settings
 from app.core.db import get_session
 from app.identity.deps import User, get_current_user
 from app.main import app
@@ -129,7 +130,11 @@ async def client(session: AsyncSession):
 
     app.dependency_overrides[get_session] = _session
     app.dependency_overrides[get_current_user] = lambda: User(uuid.uuid4(), uuid.uuid4(), "maker", "Maker")
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    # The upload must come from the site's origin (app.core.csrf).
+    headers = {"Origin": settings.allowed_origin}
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test", headers=headers
+    ) as c:
         yield c
     app.dependency_overrides.clear()
 

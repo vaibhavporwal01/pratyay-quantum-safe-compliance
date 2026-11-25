@@ -8,7 +8,7 @@ import { SHOW_TEST_ACCOUNTS, TestAccounts, type TestAccount } from "@/components
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/icons";
-import { MFA_CHALLENGE_KEY, signIn } from "@/lib/api/auth";
+import { homeFor, OTP_ENABLED, safeNext, signIn } from "@/lib/api/auth";
 import { checkEmail, checkPassword } from "@/lib/validation";
 
 const STAFF_ACCOUNTS: TestAccount[] = [
@@ -20,7 +20,15 @@ const STAFF_ACCOUNTS: TestAccount[] = [
 
 type Errors = { email?: string; password?: string; form?: string };
 
-export function SignInForm() {
+export function SignInForm({
+  audience = "staff",
+  next: returnTo,
+}: {
+  audience?: "staff" | "borrower";
+  /** Where to go after sign-in (from ?next=); ignored unless it is a path on this site. */
+  next?: string | null;
+}) {
+  const borrower = audience === "borrower";
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -47,11 +55,7 @@ export function SignInForm() {
       setErrors({ form: res.error.message });
       return;
     }
-    sessionStorage.setItem(
-      MFA_CHALLENGE_KEY,
-      JSON.stringify({ challenge_id: res.data.challenge_id, email: res.data.email }),
-    );
-    router.push("/sign-in/verify");
+    router.push(safeNext(returnTo) ?? homeFor(res.data.user.role));
   }
 
   function fillAccount(a: TestAccount) {
@@ -64,10 +68,10 @@ export function SignInForm() {
     <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
       <Field
         id="sign-in-email"
-        label="1 · Work email"
+        label={borrower ? "1 · Email" : "1 · Work email"}
         type="email"
         autoComplete="username"
-        placeholder="name@lender.in"
+        placeholder={borrower ? "name@example.in" : "name@lender.in"}
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         error={errors.email}
@@ -107,11 +111,21 @@ export function SignInForm() {
       <Button type="submit" size="l" className="w-full" disabled={busy} icon={<Icon name="arrow-right" />}>
         {busy ? "Signing in" : "Continue"}
       </Button>
-      <OrDivider />
-      <Button href="/sign-up" variant="secondary" size="l" className="w-full" icon={<Icon name="phone" />}>
-        Borrower? Use your mobile number
-      </Button>
-      {SHOW_TEST_ACCOUNTS ? (
+      {borrower ? null : (
+        <>
+          <OrDivider />
+          {OTP_ENABLED ? (
+            <Button href="/sign-up" variant="secondary" size="l" className="w-full" icon={<Icon name="phone" />}>
+              Borrower? Use your mobile number
+            </Button>
+          ) : (
+            <Button href="/sign-in?as=borrower" variant="secondary" size="l" className="w-full" icon={<Icon name="user" />}>
+              Borrower? Sign in with your email
+            </Button>
+          )}
+        </>
+      )}
+      {SHOW_TEST_ACCOUNTS && !borrower ? (
         <TestAccounts title="Quick sign-in · test accounts" accounts={STAFF_ACCOUNTS} onUse={fillAccount} />
       ) : null}
     </form>

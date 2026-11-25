@@ -17,14 +17,17 @@ const WARN_AT = 60;
 
 /**
  * Counts down to an automatic sign-out and restarts on any activity.
- * On expiry it navigates to `signOutHref`; the sign-out itself is handled there.
+ * On expiry it calls `onExpire` (which ends the session) or else navigates to `signOutHref`.
+ * The API ends an idle session after the same 15 minutes on its own.
  */
 export function IdleTimer({
   idleSeconds = 900,
   signOutHref = "/sign-in",
+  onExpire,
 }: {
   idleSeconds?: number;
   signOutHref?: string;
+  onExpire?: () => void;
 }) {
   const router = useRouter();
   const [remaining, setRemaining] = useState(idleSeconds);
@@ -42,7 +45,8 @@ export function IdleTimer({
       setRemaining(Math.max(0, left));
       if (left <= 0) {
         window.clearInterval(tick);
-        router.push(signOutHref);
+        if (onExpire) onExpire();
+        else router.push(signOutHref);
       }
     }, 1000);
 
@@ -50,7 +54,7 @@ export function IdleTimer({
       window.clearInterval(tick);
       for (const e of ACTIVITY) window.removeEventListener(e, reset);
     };
-  }, [idleSeconds, signOutHref, router]);
+  }, [idleSeconds, signOutHref, router, onExpire]);
 
   return (
     <span className="flex shrink-0 items-center gap-1.5 text-ink-2">

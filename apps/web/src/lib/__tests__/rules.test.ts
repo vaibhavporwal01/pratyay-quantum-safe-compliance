@@ -41,17 +41,27 @@ describe("rule display helpers", () => {
 describe("builder params", () => {
   it("drops optional blanks and keeps required ones for the server to report", () => {
     expect(cleanParams("prohibited_charge", { charge: "", unless: "", scope: "  " })).toEqual({
+      fact: null,
       charge: "",
       unless: null,
       scope: null,
     });
     expect(cleanParams("max_ratio", { numerator: "a", denominator: "b", max_percent: "50", exclude: ["x", " "] })).toEqual({
+      numerator_fact: null,
+      denominator_fact: null,
+      offer_on_fail: false,
       numerator: "a",
       denominator: "b",
       max_percent: "50",
       exclude: ["x"],
       scope: null,
     });
+  });
+
+  it("keeps the fact fields, so editing MF-01 keeps its gate", () => {
+    const mf01 = { subject: "annual household income", max_paise: 30_000_000, fact: "household_income_annual_paise",
+      must_be_false: "collateral", decides_scope: true, scope: "collateral-free loan" };
+    expect(cleanParams("max_amount", mf01)).toEqual(mf01);
   });
 
   it("keeps only the tenor bounds that are set", () => {

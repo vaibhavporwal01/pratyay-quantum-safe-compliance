@@ -22,6 +22,7 @@ EXPECTED_TABLES = {
     ("decision", "decisions"),
     ("decision", "rule_results"),
     ("identity", "users"),
+    ("identity", "sessions"),
 }
 
 TABLES_SQL = text(

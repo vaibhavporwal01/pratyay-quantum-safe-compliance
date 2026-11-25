@@ -2,7 +2,7 @@
 
     uv run python -m app.seed_all
 
-Users, the two RBI Directions in data/sources, their approved rules (with stages), and six
+Users (password from SEED_PASSWORD, required), the two RBI Directions in data/sources, their approved rules (with stages), and six
 fictional Lender A applications taken through the loan flow, which writes the evaluations,
 decisions and step history (and calls the audit log). Safe to run again: nothing is duplicated.
 Run migrations first (uv run alembic upgrade head).
@@ -12,11 +12,17 @@ import asyncio
 import sys
 
 from app.core.db import SessionLocal
+from app.identity.seed import SeedPasswordError, print_users, seed_password, seed_passwords
 from app.loans.seed import seed_loans
 from app.rules.seed import seed as seed_rules
 
 
 async def main() -> int:
+    try:
+        password = seed_password()
+    except SeedPasswordError as exc:
+        print(exc, file=sys.stderr)
+        return 2
     async with SessionLocal() as session:
         report = await seed_rules(session)
         await session.flush()
@@ -26,8 +32,10 @@ async def main() -> int:
                 print(f"Problem: {line}")
             return 1
         created, present = await seed_loans(session)
+        users = await seed_passwords(session, password)
         await session.commit()
     print(f"Users added: {report.users_added}")
+    print_users(users)
     for key, line in report.docs.items():
         print(f"{key}: {line}")
     print(f"Rules created: {', '.join(report.created) or 'none'}")

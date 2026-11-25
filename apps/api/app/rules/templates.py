@@ -17,6 +17,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from app.rules import facts as F
 from app.rules.extract import Kind, extract
 
 TemplateName = Literal[
@@ -38,11 +39,21 @@ class _Params(BaseModel):
     scope: str | None = None
 
 
+# Fact fields name a fact in app.rules.facts.CATALOGUE. A name outside the catalogue is allowed
+# (the rule can still be approved) but the engine refers it: "fact not in catalogue".
+FactKey = Annotated[str, Field(min_length=1, max_length=80)]
+
+
 class MaxAmount(_Params):
-    """subject <= max_paise (e.g. annual household income up to ₹3,00,000)."""
+    """fact <= max_paise (e.g. annual household income up to ₹3,00,000)."""
 
     subject: str = Field(min_length=1)
     max_paise: int | None = Field(default=None, ge=0)
+    fact: FactKey | None = None
+    # A yes/no fact that must be false for the rule to pass (e.g. collateral: collateral-free).
+    must_be_false: FactKey | None = None
+    # This rule decides whether the loan is one its applies_to covers (e.g. microfinance).
+    decides_scope: bool = False
 
 
 class MaxRatio(_Params):
@@ -52,6 +63,10 @@ class MaxRatio(_Params):
     denominator: str = Field(min_length=1)
     max_percent: Decimal | None = Field(default=None, ge=0, le=100)
     exclude: list[str] = []
+    numerator_fact: FactKey | None = None
+    denominator_fact: FactKey | None = None
+    # On a fail, offer the largest loan amount that fits (the numerator must move with the EMI).
+    offer_on_fail: bool = False
 
 
 class DaysTier(BaseModel):
@@ -68,6 +83,7 @@ class MinDays(_Params):
     subject: str = Field(min_length=1)
     working_days: bool = False
     tiers: list[DaysTier] = Field(min_length=1)
+    fact: FactKey | None = None
 
 
 class TimeWindow(_Params):
@@ -81,11 +97,13 @@ class TimeWindow(_Params):
 class ProhibitedCharge(_Params):
     charge: str = Field(min_length=1)
     unless: str | None = None
+    fact: FactKey | None = None
 
 
 class RequiredDisclosure(_Params):
     item: str = Field(min_length=1)
     includes: list[str] = []
+    fact: FactKey | None = None
 
 
 MODELS: dict[str, type[_Params]] = {
@@ -311,25 +329,36 @@ def suggest(text: str) -> dict[str, Any]:
     first = {k: next((v for v in values if v.kind == k), None) for k in ("amount", "percent",
                                                                          "days", "time")}
     times = [v for v in values if v.kind == "time"]
+    # The fact each template reads, pre-selected when the paragraph's wording names one.
+    money = tuple(f.key for f in F.CATALOGUE if f.unit.startswith("paise"))
+    income = ("household_income_monthly_paise", "household_income_annual_paise")
     if len(times) >= 2:
         template, params = "time_window", {
             "activity": "contact", "start": times[0].value, "end": times[1].value}
     elif first["percent"]:
+        den = F.match(text, among=income)
+        num = F.match(text, among=tuple(k for k in money if k not in income))
         template, params = "max_ratio", {
-            "numerator": "", "denominator": "", "max_percent": first["percent"].value}
+            "numerator": "", "denominator": "", "max_percent": first["percent"].value,
+            "numerator_fact": num, "denominator_fact": den}
     elif first["days"]:
         template, params = "min_days", {
             "subject": "", "working_days": first["days"].unit == "working_day",
-            "tiers": [{"min_days": first["days"].value}]}
+            "tiers": [{"min_days": first["days"].value}],
+            "fact": F.match(text, among=("kfs_validity_working_days",))}
     elif first["amount"]:
-        template, params = "max_amount", {"subject": "", "max_paise": first["amount"].value}
+        template, params = "max_amount", {"subject": "", "max_paise": first["amount"].value,
+                                          "fact": F.match(text, among=money)}
     elif "charge" in lower and any(w in lower for w in ("no ", "not ", "cannot")):
-        template, params = "prohibited_charge", {"charge": ""}
+        template, params = "prohibited_charge", {
+            "charge": "", "fact": F.match(text, among=money)}
     else:
-        template, params = "required_disclosure", {"item": ""}
+        template, params = "required_disclosure", {
+            "item": "", "fact": F.match(text, among=("apr_computation_sheet",))}
     return {
         "template": template,
         "params": params,
-        "missing": [k for k, v in params.items() if v is None],
+        "missing": [k for k, v in params.items()
+                    if v is None and k not in F.FACT_FIELDS.get(template, {})],
         "values": [v.as_dict() for v in values],
     }

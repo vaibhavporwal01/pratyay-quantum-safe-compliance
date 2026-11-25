@@ -21,6 +21,7 @@ export function AppShell({
   searchPlaceholder = "Search by ID, name or rule",
   searchAction,
   mastheadExtra,
+  onSignOut,
   children,
 }: {
   breadcrumb: string[];
@@ -33,6 +34,8 @@ export function AppShell({
   searchAction?: string;
   /** Shown in the masthead on wide screens and in the menu on narrow ones. */
   mastheadExtra?: ReactNode;
+  /** Shows "Sign out" in the account menu and the narrow-screen menu; the idle timer calls it. */
+  onSignOut?: () => void;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -51,6 +54,7 @@ export function AppShell({
         tag={mastheadExtra}
         menuOpen={open}
         onMenu={() => setOpen((o) => !o)}
+        onSignOut={onSignOut}
       />
       {open ? (
         <div id="app-menu" className="flex flex-col gap-4 border-t border-rule bg-paper-2 px-5 pt-3 pb-5 md:hidden">
@@ -80,6 +84,12 @@ export function AppShell({
             </p>
           ) : null}
           {mastheadExtra}
+          {onSignOut ? (
+            <button type="button" onClick={onSignOut} className="flex h-11 items-center gap-2 type-body-medium text-ink">
+              <Icon name="logout" size={18} />
+              Sign out
+            </button>
+          ) : null}
         </div>
       ) : null}
       <div aria-hidden className="h-1 border-y border-ink" />

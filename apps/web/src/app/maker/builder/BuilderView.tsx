@@ -11,6 +11,7 @@ import {
   TEMPLATE_LABEL,
   TEMPLATES,
   type CheckResult,
+  type FactDef,
   type Paragraph,
   type Params,
   type Rule,
@@ -82,6 +83,7 @@ function BuilderForm({ suggestion, rule }: { suggestion: Suggestion; rule?: Rule
   const [check, setCheck] = useState<CheckResult | null>(null);
   const [busy, setBusy] = useState<"check" | "send" | null>(null);
   const [failure, setFailure] = useState<{ message: string; problems: string[] } | null>(null);
+  const facts = useApi<FactDef[]>("/rules/facts");
 
   const cleaned = cleanParams(template, params);
   const relatedOut = related.filter((r) => r.para.trim());
@@ -137,6 +139,7 @@ function BuilderForm({ suggestion, rule }: { suggestion: Suggestion; rule?: Rule
   }
 
   const found = suggestion.values.filter((v) => v.kind !== "para_ref");
+  const factLabel = (key: unknown) => facts.data?.find((f) => f.key === key)?.label;
   const tiers = (params.tiers as Tier[] | undefined) ?? [{ min_days: null }];
   const setTier = (i: number, key: keyof Tier, raw: string) =>
     set("tiers", tiers.map((t, j) => (j === i ? { ...t, [key]: numOrNull(raw) } : t)));
@@ -234,6 +237,27 @@ function BuilderForm({ suggestion, rule }: { suggestion: Suggestion; rule?: Rule
             {FIELDS[template].map((f) => {
               const id = `param-${f.key}`;
               const v = params[f.key];
+              if (f.kind === "fact") {
+                const known = typeof v !== "string" || !v || factLabel(v);
+                return (
+                  <Labelled key={f.key} label={f.label} htmlFor={id} hint={known ? f.hint : "Fact not in catalogue: the rule can be approved but evaluates as refer."}>
+                    <select
+                      id={id}
+                      value={typeof v === "string" ? v : ""}
+                      onChange={(e) => set(f.key, e.target.value || null)}
+                      className="h-10 w-full min-w-0 rounded-[2px] border border-rule bg-white px-2 type-body text-ink focus:border-stamp focus:outline-none"
+                    >
+                      <option value="">{f.optional ? "None" : "Pick a fact"}</option>
+                      {typeof v === "string" && v && !known ? <option value={v}>{v} (not in catalogue)</option> : null}
+                      {(facts.data ?? []).map((d) => (
+                        <option key={d.key} value={d.key}>
+                          {d.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Labelled>
+                );
+              }
               if (f.kind === "bool")
                 return (
                   <label key={f.key} className="flex items-center gap-2 type-body text-ink">
@@ -349,6 +373,9 @@ function BuilderForm({ suggestion, rule }: { suggestion: Suggestion; rule?: Rule
               ) : (
                 <div className="flex flex-col gap-2">
                   <p className="type-label text-muted">Boundary tests, generated</p>
+                  {check.fact_notes?.length ? (
+                    <p role="note" className="type-small text-refer">{check.fact_notes.join(" ")}</p>
+                  ) : null}
                   {check.missing.length ? (
                     <Empty title="Values missing">{`Fill ${check.missing.join(", ")} to generate the tests. A checker cannot approve a rule with a missing value.`}</Empty>
                   ) : (

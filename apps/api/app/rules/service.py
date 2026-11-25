@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
 from app.identity import service as identity
+from app.rules import facts as rule_facts
 from app.rules import templates
 from app.rules.classify import (
     REVIEW_THRESHOLD,
@@ -201,6 +202,7 @@ async def rules_out(session: AsyncSession, rules: list[Rule]) -> list[dict]:
                 "missing": missing,
                 "problems": validate_rule(r.template, r.params, r.para_text, r.related),
                 "tests": tests,
+                "fact_notes": rule_facts.notes(r.template, r.params),
             }
         )
     return out

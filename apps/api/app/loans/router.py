@@ -1,12 +1,12 @@
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.identity.deps import User, require_role
-from app.loans import service
+from app.loans import example, service
 from app.loans.schemas import ApplicationIn, DecideIn, FactsIn, PreviewIn, RecommendIn
 
 router = APIRouter(prefix="/loans", tags=["loans"])
@@ -36,6 +36,13 @@ def _http(exc: Exception) -> HTTPException:
 
 async def _detail(session: AsyncSession, user: User, app_id: uuid.UUID) -> dict[str, Any]:
     return await service.detail(session, await service.get_application(session, user, app_id))
+
+
+@router.get("/worked-example")
+async def worked_example(session: Session, response: Response) -> dict:
+    """Public and read only: the fictional APP-2026-0142 through the engine. Saves nothing."""
+    response.headers["Cache-Control"] = f"public, max-age={example.TTL_SECONDS}"
+    return await example.cached(session)
 
 
 @router.get("/products")

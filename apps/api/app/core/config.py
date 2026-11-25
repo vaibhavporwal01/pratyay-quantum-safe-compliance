@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     # development, for the deployed showcase. Remove with the stand-in (docs/contracts.md).
     allow_role_switcher: bool = False
     allowed_origin: str = "http://localhost:3000"
+    # Sessions (identity): idle timeout matches the masthead timer; absolute cap per sign-in.
+    session_idle_minutes: int = 15
+    session_absolute_hours: int = 12
+    # Failed sign-ins before the account is locked, and for how long.
+    lockout_attempts: int = 5
+    lockout_minutes: int = 15
+    # The seed's password for the six Lender A users. Never committed or printed.
+    seed_password: str | None = None
     # Trained obligation classifier (ml/obligation/train.py). Unset: the repo's ml/ path.
     obligation_model_path: str | None = None
 

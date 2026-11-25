@@ -58,7 +58,10 @@ export type BoundaryTest = {
   passed: boolean;
 };
 
-export type CheckResult = { problems: string[]; missing: string[]; tests: BoundaryTest[] };
+export type CheckResult = { problems: string[]; missing: string[]; tests: BoundaryTest[]; fact_notes?: string[] };
+
+/** A fact the engine can check (GET /rules/facts, apps/api/app/rules/facts.py). */
+export type FactDef = { key: string; label: string; unit: string; stored: boolean; note: string };
 
 export type RuleStatus = "draft" | "approved" | "rejected" | "retired";
 
@@ -92,6 +95,8 @@ export type Rule = {
   checked_at: string | null;
   missing: string[];
   problems: string[];
+  /** Facts the engine cannot read: approvable, but the rule evaluates as refer. */
+  fact_notes?: string[];
   tests: BoundaryTest[];
 };
 

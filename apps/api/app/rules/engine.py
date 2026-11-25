@@ -6,11 +6,12 @@ Which rules: approved rules with effective_from <= on_date < effective_to (no ef
 still in force). A rule with no effective_from is not in force: the date was not verified.
 Of those, only stage "origination" rules are checked; servicing and recovery rules are listed
 as "not checked at this stage". Rules for "microfinance" apply only when the microfinance test
-(MF-01) says the loan is one; otherwise they are "not applicable".
+(a rule with decides_scope, e.g. MF-01) says the loan is one; otherwise they are "not applicable".
 
 Every number comes from the rule's params, which were taken from the quoted paragraph. A fact
 that is missing gives "refer", never a guessed pass. Arithmetic is exact (app.rules.finance).
-No eval or exec: each rule code has a plain Python evaluator below.
+No eval or exec: each template has a plain Python evaluator below, and each reads the
+fact(s) its params name from the fact catalogue (app.rules.facts). No rule code appears here.
 
 Facts (all money in paise, rate in basis points per month):
     product_category      "microfinance" or "general"
@@ -33,13 +34,15 @@ from typing import Any
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.rules import facts as F
 from app.rules import finance as fin
 from app.rules.models import Rule
 from app.rules.workflow import rule_version, source_docs_by_id
 
-# The rule that decides whether a loan is a microfinance loan, and so whether the other
-# microfinance rules apply. Its numbers still come from its params.
-MICROFINANCE_TEST = "MF-01"
+# Catalogue facts the KFS builder answers: the validity it is issued with (set by the min_days
+# rule on this fact) and the APR computation sheet.
+KFS_VALIDITY = "kfs_validity_working_days"
+APR_SHEET = "apr_computation_sheet"
 
 PASS, FAIL, REFER = "pass", "fail", "refer"
 NOT_CHECKED, NOT_APPLICABLE = "not_checked", "not_applicable"
@@ -80,9 +83,7 @@ class Evaluation:
         return next((r for r in self.results if r.code == code), None)
 
 
-class _Missing(Exception):
-    def __init__(self, names: list[str]):
-        self.names = names
+_Missing = F.Missing
 
 
 def _need(facts: dict[str, Any], *names: str) -> list[Any]:
@@ -159,24 +160,41 @@ def build_kfs(facts: dict[str, Any], on_date: date, validity_rule: Rule | None,
     return kfs
 
 
-# ---- evaluators ----------------------------------------------------------------------------
+# ---- evaluators, one per template ------------------------------------------------------
+#
+# Each reads the fact(s) its params name from the fact catalogue (app.rules.facts). Nothing
+# here knows a rule code: a new rule from a new PDF runs as soon as it is approved.
 
 Outcome = tuple[str, str, dict[str, Any]]
 Ctx = dict[str, Any]
 
 
-def _mf01(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
-    collateral, income = _need(facts, "collateral", "household_income_annual_paise")
-    limit = rule.params["max_paise"]
-    values = {"household_income_annual": fin.rupees(income), "limit": fin.rupees(limit),
-              "collateral_free": not collateral}
-    if collateral:
-        return FAIL, "Secured loan: not a collateral-free microfinance loan.", values
-    if income > limit:
-        return FAIL, (f"Household income {fin.rupees(income)} a year is above "
-                      f"{fin.rupees(limit)}: not a microfinance loan."), values
-    return PASS, (f"Collateral-free, household income {fin.rupees(income)} a year, within "
-                  f"{fin.rupees(limit)}."), values
+def _rupees(v: Any) -> str:
+    return fin.rupees(v)
+
+
+def _max_amount(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
+    p = rule.params
+    fact = F.get(p.get("fact"))
+    guard = F.get(p["must_be_false"]) if p.get("must_be_false") else None
+    keys = ([guard.key] if guard else []) + [fact.key]
+    got = F.values(keys, facts, ctx)
+    flag, v = (got[0], got[1]) if guard else (None, got[0])
+    limit = p["max_paise"]
+    scope = rule.applies_to if p.get("decides_scope") and rule.applies_to != "all" else None
+    values: dict[str, Any] = {fact.value_key: F.show(fact, v), "limit": _rupees(limit)}
+    if guard:
+        values[guard.value_key] = not flag
+    if guard and flag:
+        why = f"not a {guard.false_label.casefold()} {scope} loan" if scope else (
+            f"the rule needs it {guard.false_label.casefold()}")
+        return FAIL, f"{guard.true_label}: {why}.", values
+    shown = f"{F.show(fact, v)}{fact.per}"
+    if v > limit:
+        tail = f": not a {scope} loan." if scope else "."
+        return FAIL, f"{fact.short} {shown} is above {_rupees(limit)}{tail}", values
+    lead = f"{guard.false_label}, {fact.short.casefold()}" if guard else fact.short
+    return PASS, f"{lead} {shown}, within {_rupees(limit)}.", values
 
 
 def _ratio_text(num: Fraction | int, den: Fraction, limit: Fraction) -> str:
@@ -189,83 +207,123 @@ def _ratio_text(num: Fraction | int, den: Fraction, limit: Fraction) -> str:
     return one
 
 
-def _mf02(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
-    income, existing, amount, months, rate = _need(
-        facts, "household_income_annual_paise", "existing_monthly_repayments_paise",
-        "amount_paise", "tenor_months", "rate_bps_month",
-    )
-    ratio = Fraction(str(rule.params["max_percent"])) / 100
-    monthly = Fraction(income, 12)
-    emi = fin.emi(amount, rate, months)
-    total = existing + emi
-    e_max = ratio * monthly - existing
-    values = {
-        "monthly_income": fin.rupees(monthly),
-        "existing_repayments": fin.rupees(existing),
-        "new_emi": fin.rupees(emi),
-        "repayments": fin.rupees(total),
-        "ratio_percent": _ratio_text(total, monthly, ratio),
-        "limit_percent": str(rule.params["max_percent"]),
-        "e_max": fin.rupees(e_max) if e_max > 0 else "₹0",
-        "formula": "(existing monthly repayments + new EMI) / monthly household income",
+def _max_ratio(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
+    p = rule.params
+    num_f, den_f = F.get(p.get("numerator_fact")), F.get(p.get("denominator_fact"))
+    den, num = F.values([den_f.key, num_f.key], facts, ctx)
+    parts = [F.get(k) for k in num_f.parts]
+    part_values = [F.value(k.key, facts, ctx) for k in parts]
+    ratio = Fraction(str(p["max_percent"])) / 100
+    offerable = bool(p.get("offer_on_fail") and num_f.emi_part)
+    e_max = None
+    values: dict[str, Any] = {den_f.value_key: F.show(den_f, den)}
+    values |= {f.value_key: F.show(f, x) for f, x in zip(parts, part_values, strict=True)}
+    values |= {
+        num_f.value_key: F.show(num_f, num),
+        "ratio_percent": _ratio_text(num, den, ratio),
+        "limit_percent": str(p["max_percent"]),
     }
-    if total <= ratio * monthly:
-        return PASS, (f"{fin.rupees(total)} a month is {fin.percent(total, monthly, 2)}% of "
-                      f"{fin.rupees(monthly)}, within {rule.params['max_percent']}%."), values
+    if offerable:
+        emi = F.value(num_f.emi_part, facts, ctx)
+        e_max = ratio * den - (num - emi)
+        values["e_max"] = _rupees(e_max) if e_max > 0 else "₹0"
+    names = " + ".join(f.formula_name for f in parts) if parts else num_f.short.casefold()
+    values["formula"] = f"({names}) / {den_f.formula_name or den_f.short.casefold()}"
+    head = f"{_rupees(num)}{num_f.per} is"
+    if num <= ratio * den:
+        return PASS, (f"{head} {fin.percent(num, den, 2)}% of {_rupees(den)}, within "
+                      f"{p['max_percent']}%."), values
+    if offerable:
+        _offer(facts, ctx, values, e_max, num - F.value(num_f.emi_part, facts, ctx), den)
+    return FAIL, (f"{head} {fin.percent(num, den)}% of {_rupees(den)}, above "
+                  f"{p['max_percent']}%."), values
+
+
+def _offer(facts: dict, ctx: Ctx, values: dict, e_max: Fraction, rest: Any, den: Any) -> None:
+    """The largest loan whose EMI fits within e_max, rounded down to the product's step."""
+    rate, months = F.values(["rate_bps_month", "tenor_months"], facts, ctx)
     step = facts.get("offer_step_paise") or fin.PAISE_PER_RUPEE
     l_exact = fin.principal_for_emi(e_max, rate, months) if e_max > 0 else Fraction(0)
     offer = fin.largest_loan(e_max, rate, months, step)
-    values["l_max"] = fin.rupees(l_exact)
+    values["l_max"] = _rupees(l_exact)
     if offer > 0:
         offer_emi = fin.emi(offer, rate, months)
         ctx["offer"] = {
             "amount_paise": offer,
             "emi_paise": offer_emi,
             "e_max_paise": fin.round_down(e_max, 1),
-            "l_max_exact": fin.rupees(l_exact),
-            "ratio_percent": fin.percent(existing + offer_emi, monthly, 2),
+            "l_max_exact": _rupees(l_exact),
+            "ratio_percent": fin.percent(rest + offer_emi, den, 2),
             "step_paise": step,
-            "rounding": f"Largest loan rounded down to {fin.rupees(step)}.",
+            "rounding": f"Largest loan rounded down to {_rupees(step)}.",
         }
-    return FAIL, (f"{fin.rupees(total)} a month is {fin.percent(total, monthly)}% of "
-                  f"{fin.rupees(monthly)}, above {rule.params['max_percent']}%."), values
 
 
-def _prohibited_charge_at_origination(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
-    (charge,) = _need(facts, "prepayment_charge_paise")
-    values = {"prepayment_charge": fin.rupees(charge)}
-    if charge > 0:
-        return FAIL, f"The product sets a pre-payment charge of {fin.rupees(charge)}.", values
-    return PASS, "No pre-payment charge in the fee schedule.", values
+def _prohibited_charge(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
+    p = rule.params
+    fact = F.get(p.get("fact"))
+    (v,) = F.values([fact.key], facts, ctx)
+    values = {fact.value_key: F.show(fact, v)}
+    if v:
+        what = f" of {F.show(fact, v)}" if fact.unit.startswith("paise") else ""
+        return FAIL, f"The product sets a {p['charge']}{what}.", values
+    return PASS, f"No {p['charge']} in the fee schedule.", values
 
 
-def _kfs_validity(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
-    kfs = ctx.get("kfs")
-    if kfs is None:
-        raise _Missing(ctx.get("kfs_missing") or ["amount_paise"])
-    if kfs["valid_until"] is None:
+def _tier(params: dict[str, Any], facts: dict, ctx: Ctx) -> int | None:
+    """The minimum days of the tier that matches the loan's tenor, in days from on_date."""
+    (months,) = F.values(["tenor_months"], facts, ctx)
+    on = ctx["on_date"]
+    return _validity_days(params, (fin.add_months(on, months) - on).days)
+
+
+def _min_days(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
+    p = rule.params
+    fact = F.get(p.get("fact"))
+    (v,) = F.values([fact.key], facts, ctx)
+    need = _tier(p, facts, ctx)
+    if need is None or v is None:
         return REFER, "No validity tier in this rule matches the loan's tenor.", {}
-    values = {"issued_on": kfs["issued_on"], "valid_until": kfs["valid_until"],
-              "working_days": kfs["validity_working_days"], "note": HOLIDAY_NOTE}
-    return PASS, (f"KFS valid until {kfs['valid_until']}, {kfs['validity_working_days']} "
-                  "working days after issue."), values
+    unit = "working days" if p.get("working_days") else "days"
+    if fact.key == KFS_VALIDITY:
+        kfs = ctx["kfs"]
+        values = {"issued_on": kfs["issued_on"], "valid_until": kfs["valid_until"],
+                  "working_days": v, "note": HOLIDAY_NOTE}
+        lead = f"KFS valid until {kfs['valid_until']}, {v} working days after issue."
+    else:
+        values = {fact.value_key: v, "min_days": need}
+        lead = f"{fact.short} {v} {unit}."
+    if v < need:
+        return FAIL, f"{fact.short} {v} {unit}, below {need}.", values
+    return PASS, lead, values
 
 
-def _apr_sheet(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
-    kfs = ctx.get("kfs")
-    if kfs is None:
-        raise _Missing(ctx.get("kfs_missing") or ["amount_paise"])
-    values = {"apr_percent": kfs["apr_percent"], "fees_total": fin.rupees(kfs["fees_total_paise"]),
-              "net_disbursal": fin.rupees(kfs["net_disbursal_paise"])}
-    return PASS, f"APR computation sheet generated: APR {kfs['apr_percent']}%.", values
+def _required_disclosure(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
+    p = rule.params
+    fact = F.get(p.get("fact"))
+    (given,) = F.values([fact.key], facts, ctx)
+    if not given:
+        return FAIL, f"Not produced: {p['item']}.", {}
+    if fact.key == APR_SHEET:
+        kfs = ctx["kfs"]
+        values = {"apr_percent": kfs["apr_percent"],
+                  "fees_total": _rupees(kfs["fees_total_paise"]),
+                  "net_disbursal": _rupees(kfs["net_disbursal_paise"])}
+        return PASS, f"APR computation sheet generated: APR {kfs['apr_percent']}%.", values
+    return PASS, f"{fact.short} produced.", {fact.value_key: True}
+
+
+def _time_window(rule: Rule, facts: dict, ctx: Ctx) -> Outcome:
+    return REFER, "Checked at the time of contact, not on an application: check by hand.", {}
 
 
 EVALUATORS: dict[str, Callable[[Rule, dict, Ctx], Outcome]] = {
-    "MF-01": _mf01,
-    "MF-02": _mf02,
-    "MF-04": _prohibited_charge_at_origination,
-    "KF-01": _kfs_validity,
-    "KF-03": _apr_sheet,
+    "max_amount": _max_amount,
+    "max_ratio": _max_ratio,
+    "min_days": _min_days,
+    "prohibited_charge": _prohibited_charge,
+    "required_disclosure": _required_disclosure,
+    "time_window": _time_window,
 }
 
 
@@ -286,8 +344,20 @@ async def rules_in_force(session: AsyncSession, on_date: date) -> list[Rule]:
     return list(rows)
 
 
+def decides_scope(rule: Rule) -> bool:
+    """A rule that decides whether the loan is one its applies_to covers (e.g. microfinance)."""
+    return bool(rule.params.get("decides_scope")) and rule.applies_to != "all"
+
+
 def _order(rule: Rule) -> tuple[int, str]:
-    return (0 if rule.code == MICROFINANCE_TEST else 1, rule.code)
+    # Scope-deciding rules run first, so the rules they gate know the answer.
+    return (0 if decides_scope(rule) else 1, rule.code)
+
+
+def _validity_rule(rules: list[Rule]) -> Rule | None:
+    """The origination min_days rule on the KFS validity fact: the KFS is issued with it."""
+    return next((r for r in rules if r.stage == "origination" and r.template == "min_days"
+                 and r.params.get("fact") == KFS_VALIDITY), None)
 
 
 async def evaluate_application(
@@ -301,10 +371,10 @@ async def evaluate_application(
         doc = docs.get(r.source_doc_id)
         return f"{doc.short_code if doc and doc.short_code else 'Source'} para {r.source_para}"
 
-    ctx: Ctx = {}
-    kf01 = next((r for r in rules if r.code == "KF-01" and r.stage == "origination"), None)
+    ctx: Ctx = {"on_date": on_date}
+    validity = _validity_rule(rules)
     try:
-        ctx["kfs"] = build_kfs(facts, on_date, kf01, anchor(kf01) if kf01 else None)
+        ctx["kfs"] = build_kfs(facts, on_date, validity, anchor(validity) if validity else None)
     except _Missing as m:
         ctx["kfs_missing"] = m.names
 
@@ -324,21 +394,26 @@ async def evaluate_application(
             results.append(RuleResult(**base, status=NOT_APPLICABLE,
                                       message="Not a microfinance loan."))
             continue
-        evaluator = EVALUATORS.get(r.code)
+        evaluator = EVALUATORS.get(r.template)
         if evaluator is None:
             results.append(RuleResult(**base, status=REFER,
-                                      message="No evaluator for this rule yet: check by hand."))
+                                      message="No evaluator for this template: check by hand."))
             continue
         try:
             status, message, values = evaluator(r, facts, ctx)
             results.append(RuleResult(**base, status=status, message=message, values=values))
+        except F.NotInCatalogue as n:
+            status = REFER
+            message = (f"Fact not in catalogue: {n.key}." if n.key
+                       else "No fact chosen for this rule.")
+            results.append(RuleResult(**base, status=REFER, message=message))
         except _Missing as m:
             status = REFER
             results.append(RuleResult(
                 **base, status=REFER, missing=m.names,
                 message=f"Missing: {', '.join(n.replace('_', ' ') for n in m.names)}.",
             ))
-        if r.code == MICROFINANCE_TEST and category == "microfinance":
+        if decides_scope(r) and r.applies_to == category:
             microfinance = {PASS: True, FAIL: False}.get(status)
 
     checked = [r.status for r in results if r.status in (PASS, FAIL, REFER)]

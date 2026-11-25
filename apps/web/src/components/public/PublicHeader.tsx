@@ -5,6 +5,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/icons";
 import { Logo } from "@/components/ui/Logo";
+import { OTP_ENABLED } from "@/lib/api/auth";
+
+// With mobile OTP off, borrowers apply after signing in with email.
+const APPLY_HREF = OTP_ENABLED ? "/sign-up" : "/sign-in?as=borrower";
 
 const LINKS = [
   { href: "#how", label: "How it decides" },
@@ -46,7 +50,7 @@ export function PublicHeader() {
           <Button href="/sign-in" variant="secondary">
             Sign in
           </Button>
-          <Button href="/sign-up" icon={<Icon name="arrow-right" />}>
+          <Button href={APPLY_HREF} icon={<Icon name="arrow-right" />}>
             Apply
           </Button>
         </div>
@@ -81,7 +85,7 @@ export function PublicHeader() {
             <Button href="/sign-in" variant="secondary" size="l" className="w-full">
               Sign in
             </Button>
-            <Button href="/sign-up" size="l" className="w-full" icon={<Icon name="arrow-right" />}>
+            <Button href={APPLY_HREF} size="l" className="w-full" icon={<Icon name="arrow-right" />}>
               Apply
             </Button>
           </div>
