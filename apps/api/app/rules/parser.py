@@ -145,6 +145,7 @@ def parse_pages(pages: list[list[Line]]) -> ParseResult:
     body = body_font_size(pages)
 
     top: int | None = None  # last accepted top-level number
+    top_label = ""  # its full label, e.g. "100Y" for an inserted paragraph
     sub: int | None = None  # last accepted sub-number under `top`
     open_number: str | None = None  # paragraph currently collecting lines
     open_page = 0
@@ -174,12 +175,13 @@ def parse_pages(pages: list[list[Line]]) -> ParseResult:
             if m:
                 n, suffix = int(m.group(1)), m.group(2)
                 if top is None:
-                    expected = n == 1 and not suffix
+                    expected = n <= 1 + MAX_TOP_GAP and not suffix
                 else:
-                    expected = top < n <= top + MAX_TOP_GAP or (bool(suffix) and n == top)
+                    expected = (top < n <= top + MAX_TOP_GAP or (bool(suffix) and n == top)
+                                or (suffix == "A" and n > top))
                 if expected:
-                    top, sub = n, None
-                    start(f"{n}{suffix}", ln.page, m.group(3))
+                    top, sub, top_label = n, None, f"{n}{suffix}"
+                    start(top_label, ln.page, m.group(3))
                     continue
 
             m = SUB_RE.match(text)
@@ -188,7 +190,7 @@ def parse_pages(pages: list[list[Line]]) -> ParseResult:
                 expected = n == 1 if sub is None else sub < n <= sub + MAX_SUB_GAP
                 if expected:
                     sub = n
-                    start(f"{top}({n})", ln.page, m.group(2))
+                    start(f"{top_label}({n})", ln.page, m.group(2))
                     continue
 
             if len(text) <= HEADING_MAX_LEN and HEADING_RE.match(text):
