@@ -6,7 +6,7 @@ import { totpSecondsLeft, VerifyForm } from "../sign-in/verify/VerifyForm";
 import { SignUpForm } from "../sign-up/SignUpForm";
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace: push, refresh: vi.fn() }) }));
 
 beforeEach(() => {
   push.mockReset();

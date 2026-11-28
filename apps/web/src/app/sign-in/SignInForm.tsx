@@ -12,10 +12,10 @@ import { homeFor, OTP_ENABLED, safeNext, signIn } from "@/lib/api/auth";
 import { checkEmail, checkPassword } from "@/lib/validation";
 
 const STAFF_ACCOUNTS: TestAccount[] = [
-  { name: "Anita Sharma", role: "Credit officer", value: "anita.sharma@lendera.example" },
-  { name: "Neha Verma", role: "Compliance maker", value: "neha.verma@lendera.example" },
-  { name: "Rahul Mehta", role: "Compliance checker", value: "rahul.mehta@lendera.example" },
-  { name: "Priya Nair", role: "Auditor, read-only", value: "priya.nair@lendera.example" },
+  { name: "Anita Sharma", role: "Credit officer", value: "anita.sharma@lender-a.in" },
+  { name: "Neha Verma", role: "Compliance maker", value: "neha.verma@lender-a.in" },
+  { name: "Rahul Mehta", role: "Compliance checker", value: "rahul.mehta@lender-a.in" },
+  { name: "Priya Nair", role: "Auditor, read-only", value: "priya.nair@lender-a.in" },
 ];
 
 type Errors = { email?: string; password?: string; form?: string };
@@ -38,25 +38,51 @@ export function SignInForm({
   const [resetHelp, setResetHelp] = useState(false);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const next: Errors = {
-      email: checkEmail(email) ?? undefined,
-      password: checkPassword(password) ?? undefined,
-    };
-    setErrors(next);
-    if (next.email || next.password) {
-      document.getElementById(next.email ? "sign-in-email" : "sign-in-password")?.focus();
-      return;
-    }
-    setBusy(true);
-    const res = await signIn({ email, password });
+  e.preventDefault();
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const next: Errors = {
+    email: checkEmail(normalizedEmail) ?? undefined,
+    password: checkPassword(password) ?? undefined,
+  };
+
+  setErrors(next);
+
+  if (next.email || next.password) {
+    document
+      .getElementById(next.email ? "sign-in-email" : "sign-in-password")
+      ?.focus();
+    return;
+  }
+
+  setBusy(true);
+  setErrors({});
+
+  try {
+    const res = await signIn({
+      email: normalizedEmail,
+      password,
+    });
+
     if (!res.ok) {
-      setBusy(false);
       setErrors({ form: res.error.message });
       return;
     }
-    router.push(safeNext(returnTo) ?? homeFor(res.data.user.role));
+
+    router.replace(
+      safeNext(returnTo) ?? homeFor(res.data.user.role)
+    );
+    router.refresh();
+  } catch (error) {
+  console.error("SIGN-IN TEST ERROR:", error);
+  setErrors({
+    form: "Unable to sign in. Please check your connection and try again.",
+  });
+} finally {
+    setBusy(false);
   }
+}
 
   function fillAccount(a: TestAccount) {
     setEmail(a.value);

@@ -57,12 +57,24 @@ async def list_users(session: AsyncSession, org_id: uuid.UUID) -> list[User]:
     return list(rows)
 
 
-async def user_names(session: AsyncSession, ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
+async def user_names(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    ids: set[uuid.UUID],
+) -> dict[uuid.UUID, str]:
     ids = {i for i in ids if i is not None}
+
     if not ids:
         return {}
-    rows = await session.execute(select(User.id, User.name).where(User.id.in_(ids)))
-    return {r.id: r.name for r in rows}
+
+    rows = await session.execute(
+        select(User.id, User.name).where(
+            User.id.in_(ids),
+            User.org_id == org_id,
+        )
+    )
+
+    return {row.id: row.name for row in rows}
 
 
 async def seed_dev_users(session: AsyncSession) -> int:

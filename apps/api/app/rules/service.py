@@ -172,10 +172,10 @@ async def source_stats(session: AsyncSession, docs: list[SourceDoc]) -> list[dic
     ]
 
 
-async def rules_out(session: AsyncSession, rules: list[Rule]) -> list[dict]:
+async def rules_out(session: AsyncSession, org_id: uuid.UUID, rules: list[Rule]) -> list[dict]:
     """Rules with names, source titles, open problems and boundary tests, for the API."""
     names = await identity.user_names(
-        session, {r.made_by for r in rules} | {r.checked_by for r in rules if r.checked_by}
+        session, org_id, {r.made_by for r in rules} | {r.checked_by for r in rules if r.checked_by}
     )
     docs = await source_docs_by_id(session, {r.source_doc_id for r in rules})
     out = []

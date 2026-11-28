@@ -22,6 +22,7 @@ import {
   toPaise,
   type AppSummary,
   type Detail,
+  type DecisionVerification,
   type Evaluation,
   type Kfs,
   type LoanEvent,
@@ -103,7 +104,7 @@ export function ParagraphQuote({ r }: { r: RuleResult }) {
 /* ---- receipt --------------------------------------------------------------------------- */
 
 /** The decision receipt for an application. Unsigned until the trust module lands. */
-export function LoanReceipt({ d, className }: { d: Detail; className?: string }) {
+export function LoanReceipt({ d, verification, className }: { d: Detail; verification?: DecisionVerification; className?: string }) {
   const a = d.application;
   const dec = d.decision;
   const final = d.final_evaluation ?? d.recommended_evaluation;
@@ -136,6 +137,16 @@ export function LoanReceipt({ d, className }: { d: Detail; className?: string })
       outcome={dec?.outcome ? finalLabel(a.status) : dec ? "With the checker" : "With the officer"}
       lines={lines}
       checks={results.length ? [{ label: "Rules", value: resultSummary(results) }] : []}
+      verificationStatus={verification?.status ?? "pending"}
+      seal={
+        verification?.verified && verification.hash && verification.previous_hash
+          ? {
+              hash: `${verification.hash.slice(0, 8)}…${verification.hash.slice(-8)}`,
+              prev: `${verification.previous_hash.slice(0, 8)}…${verification.previous_hash.slice(-8)}`,
+              signature: `${verification.algorithm} signature · ${verification.signature_bytes?.toLocaleString() ?? "N/A"} B · key ${verification.key_id ?? "unknown"}`,
+            }
+          : undefined
+      }
     />
   );
 }
@@ -214,7 +225,7 @@ export function validityText(kfs: Kfs): string {
 
 /* ---- events ---------------------------------------------------------------------------- */
 
-export function EventList({ events }: { events: LoanEvent[] }) {
+export function EventList({ events, verification }: { events: LoanEvent[]; verification?: DecisionVerification }) {
   return (
     <ol className="flex flex-col">
       {events.map((e) => (
@@ -226,7 +237,7 @@ export function EventList({ events }: { events: LoanEvent[] }) {
               {eventDetail(e) ? ` · ${eventDetail(e)}` : ""}
             </p>
           </div>
-          {e.action === "decided" ? <Status status="pending" label="Signature pending" /> : null}
+          {e.action === "decided" ? <Status status={verification?.status === "verified" ? "pass" : verification?.status === "failed" ? "fail" : "pending"} label={verification?.status === "verified" ? "Signature verified" : verification?.status === "failed" ? "Verification failed" : "Signature pending"} /> : null}
         </li>
       ))}
     </ol>

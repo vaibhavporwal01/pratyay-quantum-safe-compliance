@@ -199,8 +199,8 @@ async def overview(session: Session, user: Reader) -> dict:
     return {
         "counts": await service.counts(session),
         "sources": len(await service.list_source_docs(session)),
-        "waiting_for_you": await service.rules_out(session, waiting),
-        "recently_checked": await service.rules_out(session, checked[:5]),
+        "waiting_for_you": await service.rules_out(session, user.org_id, waiting),
+        "recently_checked": await service.rules_out(session, user.org_id, checked[:5]),
     }
 
 
@@ -208,7 +208,7 @@ async def overview(session: Session, user: Reader) -> dict:
 async def rule_library(
     session: Session, user: Reader, as_of: Annotated[date | None, Query()] = None
 ) -> list:
-    return await service.rules_out(session, await service.library(session, as_of))
+    return await service.rules_out(session, user.org_id, await service.library(session, as_of))
 
 
 @router.get("", response_model=list[RuleOut])
@@ -221,7 +221,7 @@ async def list_all_rules(
     rules = await service.list_rules(
         session, tuple(status_) if status_ else None, made_by=user.id if mine else None
     )
-    return await service.rules_out(session, rules)
+    return await service.rules_out(session, user.org_id, rules)
 
 
 @router.post("", response_model=RuleOut, status_code=status.HTTP_201_CREATED)
@@ -231,7 +231,7 @@ async def create_rule(body: RuleCreate, session: Session, user: Maker) -> dict:
     except (service.WorkflowError, service.NotFound) as exc:
         raise _workflow_errors(exc) from exc
     await session.commit()
-    return (await service.rules_out(session, [rule]))[0]
+    return (await service.rules_out(session, user.org_id, [rule]))[0]
 
 
 @router.get("/{rule_id}", response_model=RuleOut)
@@ -240,7 +240,7 @@ async def read_rule(rule_id: uuid.UUID, session: Session, user: Reader) -> dict:
         rule = await service.get_rule(session, rule_id)
     except service.NotFound as exc:
         raise _workflow_errors(exc) from exc
-    return (await service.rules_out(session, [rule]))[0]
+    return (await service.rules_out(session, user.org_id, [rule]))[0]
 
 
 @router.patch("/{rule_id}", response_model=RuleOut)
@@ -252,7 +252,7 @@ async def edit_rule(rule_id: uuid.UUID, body: RuleUpdate, session: Session, user
     except (service.WorkflowError, service.NotFound) as exc:
         raise _workflow_errors(exc) from exc
     await session.commit()
-    return (await service.rules_out(session, [rule]))[0]
+    return (await service.rules_out(session, user.org_id, [rule]))[0]
 
 
 async def _review(action, rule_id, body, session, user) -> dict:
@@ -261,7 +261,7 @@ async def _review(action, rule_id, body, session, user) -> dict:
     except (service.WorkflowError, service.NotFound) as exc:
         raise _workflow_errors(exc) from exc
     await session.commit()
-    return (await service.rules_out(session, [rule]))[0]
+    return (await service.rules_out(session, user.org_id, [rule]))[0]
 
 
 @router.post("/{rule_id}/approve", response_model=RuleOut)

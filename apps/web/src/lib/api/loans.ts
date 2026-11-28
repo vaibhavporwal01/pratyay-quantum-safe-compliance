@@ -358,3 +358,18 @@ export const EVENT_LABEL: Record<string, string> = {
   recommended: "Recommended by the officer",
   decided: "Decided by a second person",
 };
+
+
+/** GET /loans/applications/{id}/verification: scoped cryptographic receipt check. */
+export type DecisionVerification = {
+  status: "verified" | "failed" | "pending";
+  verified: boolean;
+  seq: number | null;
+  hash: string | null;
+  previous_hash: string | null;
+  algorithm: string | null;
+  key_id: string | null;
+  signature_bytes: number | null;
+  created_at: string | null;
+  checks: Record<string, boolean>;
+};

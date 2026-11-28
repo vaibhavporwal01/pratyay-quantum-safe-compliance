@@ -23,11 +23,14 @@ export function OfficerOverview() {
   const first = me.name.split(/\s+/)[0];
   const decided = counts.approved + counts.approved_modified + counts.rejected;
   const recent = (all.data ?? []).filter((a) => a.status !== "evaluated").slice(0, 5);
+  const decidedApps = (all.data ?? []).filter((a) => a.status === "approved" || a.status === "approved_modified" || a.status === "rejected");
+  const signedCount = decidedApps.filter((a) => a.signed).length;
+  const unsignedCount = Math.max(0, decided - signedCount);
 
   return (
     <div className="flex flex-col gap-7">
       <PageHead
-        eyebrow="§ 01 · Overview"
+        eyebrow="Â§ 01 Â· Overview"
         title={n ? `${first}, ${(WORDS[n] ?? String(n)).toLowerCase()} application${n === 1 ? " is" : "s are"} waiting for you.` : `${first}, nothing is waiting for you.`}
         subtitle="Every line opens the rule-by-rule record. Figures are for Lender A."
         actions={
@@ -66,13 +69,17 @@ export function OfficerOverview() {
           </DataCard>
         </div>
         <div className="flex min-w-0 flex-col gap-7 lg:w-[440px] lg:shrink-0">
-          {/* HOOK(Pulkit): chain health comes from ledger.verify_all when signing lands. */}
-          <DataCard eyebrow="Trust layer" title="Chain health" tag={<Tag>Not enabled</Tag>} state={{ ...overview, data: true }}>
+          <DataCard eyebrow="Trust layer" title="Decision signing" tag={<Tag>{all.data ? "Live status" : "Loading"}</Tag>} state={{ ...overview, data: true }}>
             {() => (
               <div className="flex flex-col gap-3 pt-3">
-                <Status status="pending" label="Signature pending" />
+                <Status
+                  status={!all.data ? "pending" : signedCount > 0 ? "pass" : "pending"}
+                  label={all.data ? `${signedCount} signed · ${unsignedCount} unsigned` : "Loading signing status"}
+                />
                 <p className="type-small text-ink-2">
-                  {`${decided} decision${decided === 1 ? " is" : "s are"} recorded and waiting to be signed. Verification is available when signing is enabled.`}
+                  {all.data
+                    ? `${decided} decided applications · ${signedCount} with a ledger signature and ${unsignedCount} awaiting one. Full ledger-chain verification is available to Auditor and Admin roles.`
+                    : "Application signing status is loading."}
                 </p>
               </div>
             )}

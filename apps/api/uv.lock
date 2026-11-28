@@ -910,6 +910,15 @@ wheels = [
 ]
 
 [[package]]
+name = "liboqs-python"
+version = "0.16.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b2/a3/74ca4fa326657c4f60ddffe26489f5c9ddb197706537d6facbe7853cd25c/liboqs_python-0.16.0.2.tar.gz", hash = "sha256:7ab4dee5f84536417a8d0ff0c37238ef440ce22cd8f62d3236370320894c92e7", size = 81988, upload-time = "2026-10-28T17:24:33.632Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f3/6f/5376e65bec5a2f58384ab3cba5af8e2fa89a048701de97858e636ca6ecbf/liboqs_python-0.16.0.2-py3-none-any.whl", hash = "sha256:8e80da56cd409600a8366c5cf5099acd08eea4c031e4af225b63ba0c53433d76", size = 21258, upload-time = "2026-10-28T17:24:31.941Z" },
+]
+
+[[package]]
 name = "mako"
 version = "1.4.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1341,10 +1350,12 @@ dependencies = [
     { name = "cryptography" },
     { name = "fastapi", extra = ["standard"] },
     { name = "joblib" },
+    { name = "liboqs-python" },
     { name = "pdfplumber" },
     { name = "pydantic-settings" },
     { name = "scikit-learn" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "tzdata" },
 ]
 
 [package.dev-dependencies]
@@ -1363,10 +1374,12 @@ requires-dist = [
     { name = "cryptography", specifier = ">=47" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.165" },
     { name = "joblib", specifier = ">=1.6.0" },
+    { name = "liboqs-python", specifier = "==0.16.0.2" },
     { name = "pdfplumber", specifier = ">=0.11" },
     { name = "pydantic-settings", specifier = ">=2.16" },
     { name = "scikit-learn", specifier = ">=1.9.1" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1" },
+    { name = "tzdata", specifier = ">=2026.6" },
 ]
 
 [package.metadata.requires-dev]
@@ -2093,6 +2106,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ff/50/0195198eb1d75bab716bb0a813abea4cc394bfa17a92a189f021a34859af/typing_inspection-0.4.5.tar.gz", hash = "sha256:7f16c411e7930dc79596d42ab44672a3fe5f60eb34b781a1647e7872363120c7", size = 81194, upload-time = "2026-11-04T14:13:23.774Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/de/0c/ea2544850a7c135e15033a5c7a8e7211136184b7ae63e2239d557c2b3019/typing_inspection-0.4.5-py3-none-any.whl", hash = "sha256:bc210535442b39e1bf2805e0c7a17dfd6a4ace760c84c7f7d16245d23a6b1c39", size = 14874, upload-time = "2026-11-04T14:13:22.616Z" },
+]
+
+[[package]]
+name = "tzdata"
+version = "2026.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/29/6a1391d31cd00ff9e927215a224a880e1e84e826b64ba80a499e51c074d8/tzdata-2026.6.tar.gz", hash = "sha256:85d2cd9c09f81f0bb29db27759fc83af4f1e620efb814f8c5bf8b4cc4feece6d", size = 201017, upload-time = "2026-10-28T09:57:09.137Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0a/66/9a06c2227fedfd4919f0eaaa8b94377d9730882a7e4f95823c9a331ab5e1/tzdata-2026.6-py2.py3-none-any.whl", hash = "sha256:0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec", size = 348210, upload-time = "2026-10-28T09:57:07.276Z" },
 ]
 
 [[package]]

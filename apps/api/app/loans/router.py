@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_session
 from app.identity.deps import User, require_role
 from app.loans import example, service
+from app.trust import ledger
+from app.trust.models import LedgerRecord
 from app.loans.schemas import ApplicationIn, DecideIn, FactsIn, PreviewIn, RecommendIn
 
 router = APIRouter(prefix="/loans", tags=["loans"])
@@ -92,6 +94,56 @@ async def application(app_id: uuid.UUID, session: Session, user: Anyone) -> dict
         return await _detail(session, user, app_id)
     except service.NotFound as exc:
         raise _http(exc) from exc
+
+
+@router.get("/applications/{app_id}/verification")
+async def application_verification(app_id: uuid.UUID, session: Session, user: Anyone) -> dict:
+    # Ownership is checked before looking up or returning ledger metadata.
+    try:
+        app = await service.get_application(session, user, app_id)
+    except service.NotFound as exc:
+        raise _http(exc) from exc
+
+    detail = await service.detail(session, app)
+    decision = detail.get("decision")
+    seq = decision.get("ledger_seq") if decision else None
+    if seq is None:
+        return {
+            "status": "pending", "verified": False, "seq": None,
+            "hash": None, "previous_hash": None, "algorithm": None,
+            "key_id": None, "signature_bytes": None, "created_at": None,
+            "checks": {},
+        }
+
+    record = await session.get(LedgerRecord, seq)
+    if record is None:
+        return {
+            "status": "failed", "verified": False, "seq": seq,
+            "hash": None, "previous_hash": None, "algorithm": None,
+            "key_id": None, "signature_bytes": None, "created_at": None,
+            "checks": {"exists": False, "application_binding": False},
+        }
+
+    report = await ledger.verify(session, seq)
+    application_binding = (
+        record.event_type == "decision"
+        and isinstance(record.payload, dict)
+        and record.payload.get("application") == app.ref
+    )
+    checks = {**report.checks, "application_binding": application_binding}
+    verified = bool(report.ok and application_binding)
+    return {
+        "status": "verified" if verified else "failed",
+        "verified": verified,
+        "seq": record.seq,
+        "hash": record.entry_hash.hex(),
+        "previous_hash": record.previous_hash.hex(),
+        "algorithm": record.algorithm,
+        "key_id": record.key_id,
+        "signature_bytes": len(record.signature),
+        "created_at": record.created_at,
+        "checks": checks,
+    }
 
 
 async def _act(session: AsyncSession, user: User, app_id: uuid.UUID, action) -> dict:

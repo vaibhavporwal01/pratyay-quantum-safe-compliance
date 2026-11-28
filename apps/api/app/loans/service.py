@@ -1,8 +1,8 @@
 """loans: service. The only entry point the router, the seed and other modules use.
 
-    borrower or officer submits ─▶ engine runs, snapshot stored ─▶ status "evaluated"
-    officer recommends (approve | approve_modified | reject) ─▶ "recommended"
-    checker approves, modifies or rejects with a note ─▶ approved | approved_modified | rejected
+    borrower or officer submits â”€â–¶ engine runs, snapshot stored â”€â–¶ status "evaluated"
+    officer recommends (approve | approve_modified | reject) â”€â–¶ "recommended"
+    checker approves, modifies or rejects with a note â”€â–¶ approved | approved_modified | rejected
 
 The officer and the checker on one decision are different users (checked here and by the
 database). Every step is written to the audit log (audit.service.log_event) and to the
@@ -210,7 +210,7 @@ async def detail(session: AsyncSession, app: Application) -> dict[str, Any]:
     ids = {e.actor_id for e in events} | {app.submitted_by}
     if dec:
         ids |= {dec.officer_id, dec.checker_id}
-    names = await identity.user_names(session, ids)
+    names = await identity.user_names(session, app.org_id, ids)
     final_ev = await session.get(Evaluation, dec.evaluation_id) if dec and dec.evaluation_id else None
     at_recommended = None
     if dec and dec.recommended_paise and dec.recommended_paise != app.amount_paise:
@@ -378,15 +378,11 @@ async def recommend(
 
 
 async def _sign_decision(session: AsyncSession, decision: Decision, payload: dict) -> int | None:
-    """HOOK(Pulkit): sign the final decision on the ledger.
+    """Append the final decision to the signed ledger in this transaction."""
+    from app.trust import ledger
 
-    When the trust module lands, replace the body with
-        entry = await ledger.append(session, "decision", payload)
-        return entry.seq
-    inside this same transaction. Until then nothing is signed: ledger_seq stays null and every
-    page shows "Signature pending". No placeholder signature or hash is stored.
-    """
-    return None
+    entry = await ledger.append(session, "decision", payload)
+    return entry.seq
 
 
 async def decide(
@@ -506,7 +502,7 @@ async def replay(session: AsyncSession, user: User, app_id: uuid.UUID) -> dict[s
         "rules_now": sorted(now_rules),
         "signature": "signed" if dec and dec.ledger_seq is not None else "pending",
         "decision": _decision_dict(dec, await identity.user_names(
-            session, {dec.officer_id, dec.checker_id})) if dec else None,
+            session, user.org_id, {dec.officer_id, dec.checker_id})) if dec else None,
     }
 
 
@@ -535,7 +531,7 @@ async def decisions_log(session: AsyncSession, user: User) -> list[dict[str, Any
         .order_by(Decision.decided_at.desc(), Application.ref)
     )).all()
     names = await identity.user_names(
-        session, {d.officer_id for d, _ in rows} | {d.checker_id for d, _ in rows if d.checker_id}
+        session, user.org_id, {d.officer_id for d, _ in rows} | {d.checker_id for d, _ in rows if d.checker_id}
     )
     out = []
     for dec, app in rows:
@@ -567,7 +563,7 @@ async def recent_events(session: AsyncSession, user: User, limit: int = 100) -> 
         .where(Application.org_id == user.org_id)
         .order_by(Event.seq.desc()).limit(limit)
     )).all()
-    names = await identity.user_names(session, {e.actor_id for e, _ in rows})
+    names = await identity.user_names(session, user.org_id, {e.actor_id for e, _ in rows})
     return [
         {"id": e.id, "ref": ref, "application_id": e.application_id, "action": e.action,
          "actor_name": names.get(e.actor_id), "meta": e.meta, "created_at": e.created_at}

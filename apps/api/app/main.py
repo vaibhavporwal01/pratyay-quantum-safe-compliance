@@ -10,6 +10,7 @@ from app.identity.router import auth_router
 from app.identity.router import router as identity_router
 from app.loans.router import router as loans_router
 from app.rules.router import router as rules_router
+from app.trust.router import router as trust_router
 
 app = FastAPI(title="Pratyay API", version="0.1.0")
 
@@ -29,3 +30,4 @@ app.include_router(identity_router, prefix="/api/v1")
 app.include_router(rules_router, prefix="/api/v1")
 app.include_router(loans_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
+app.include_router(trust_router, prefix="/api/v1")

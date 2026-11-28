@@ -7,7 +7,7 @@ import { NoteField } from "@/components/app/NoteField";
 import { ErrorState, Loading } from "@/components/app/States";
 import { Button, Card, Field, Figure, Figures, LedgerRow, PageHead, Tag } from "@/components/ui";
 import { api, failureMessage } from "@/lib/api/client";
-import { dateTime, money, monthlyRate, toPaise, type Detail, type Recommendation } from "@/lib/api/loans";
+import { dateTime, money, monthlyRate, toPaise, type Detail, type DecisionVerification, type Recommendation } from "@/lib/api/loans";
 import { formatDate } from "@/lib/api/rules";
 import { useApi } from "@/lib/useApi";
 
@@ -38,6 +38,7 @@ export function headline(d: Detail): { title: string; subtitle: string } {
 export function DecisionView() {
   const { id } = useParams<{ id: string }>();
   const detail = useApi<Detail>(`/loans/applications/${id}`);
+  const verification = useApi<DecisionVerification>(`/loans/applications/${id}/verification`);
   if (detail.error) return <ErrorState message={detail.error} onRetry={detail.reload} />;
   if (!detail.data) return <Loading />;
   const d = detail.data;
@@ -94,12 +95,12 @@ export function DecisionView() {
           ) : null}
         </div>
         <div className="flex min-w-0 flex-col gap-7 lg:w-[380px] lg:shrink-0">
-          <LoanReceipt d={d} className="self-center lg:self-stretch" />
+          <LoanReceipt d={d} verification={verification.data} className="self-center lg:self-stretch" />
           {a.status === "evaluated" && ev ? <RecommendCard d={d} onDone={detail.reload} /> : null}
           {a.status === "evaluated" && ev?.outcome === "refer" ? <FactsCard d={d} onDone={detail.reload} /> : null}
           {d.decision ? <NotesCard d={d} /> : null}
           <Card eyebrow="Step history" title="What happened, in order">
-            <EventList events={d.events} />
+            <EventList events={d.events} verification={verification.data} />
           </Card>
         </div>
       </div>

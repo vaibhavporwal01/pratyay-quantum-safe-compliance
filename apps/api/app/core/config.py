@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     lockout_minutes: int = 15
     # The seed's password for the six Lender A users. Never committed or printed.
     seed_password: str | None = None
+    # Local/production encryption secrets; supplied through environment or .env.
+    data_encryption_key: str | None = None
+    email_hmac_key: str | None = None
     # Trained obligation classifier (ml/obligation/train.py). Unset: the repo's ml/ path.
     obligation_model_path: str | None = None
 

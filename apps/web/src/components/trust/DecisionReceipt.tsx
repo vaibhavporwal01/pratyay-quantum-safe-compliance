@@ -46,6 +46,7 @@ export type DecisionReceiptProps = {
    * The ledger seal. Omit until the record is signed: the receipt then says "Signature pending"
    * and shows no hash or barcode. Never pass placeholder hashes.
    */
+  verificationStatus?: "verified" | "failed" | "pending";
   seal?: {
     /** Short form shown on the receipt, e.g. "7f3a91c2…e04b5d18". */
     hash: string;
@@ -66,6 +67,7 @@ export function DecisionReceipt({
   outcome,
   lines,
   checks,
+  verificationStatus = "pending",
   seal,
   stampDate,
   className,
@@ -119,8 +121,16 @@ export function DecisionReceipt({
           </>
         ) : (
           <div className="flex flex-col gap-1">
-            <Status status="pending" label="Signature pending" />
-            <p className="type-caption text-muted">Verification available when signing is enabled.</p>
+            {verificationStatus === "failed" ? (
+              <Status status="fail" label="Verification failed" />
+            ) : (
+              <Status status="pending" label="Signature pending" />
+            )}
+            <p className="type-caption text-muted">
+              {verificationStatus === "failed"
+                ? "The ledger entry or its application binding did not pass verification. Do not rely on this receipt as verified."
+                : "This decision has not yet been signed in the verification ledger."}
+            </p>
           </div>
         )}
       </div>
